@@ -267,8 +267,8 @@ def find_table_end(df, start_row, start_col):
 
     for r in range(start_row + 1, len(df)):
 
-        row_data = df.iloc[r, start_col:start_col + 8]
-
+        # row_data = df.iloc[r, start_col:start_col + 8]
+        row_data = df.iloc[r]
         non_blank = row_data.notna().sum()
 
         if non_blank == 0:
@@ -428,8 +428,8 @@ if uploaded_files:
                     header=None
                 )
                 # Fix merged cells
-                raw_df = raw_df.ffill()
-                
+                # raw_df = raw_df.ffill()
+                raw_df = raw_df.ffill(axis=1)
                 # Remove duplicate columns
                 raw_df = raw_df.loc[:, ~raw_df.columns.duplicated()]
 
@@ -438,7 +438,7 @@ if uploaded_files:
                 ).reset_index(drop=True)
 
                 tables = find_all_tables(raw_df)
-                processed_ranges = []
+                # processed_ranges = []
 
                 if len(tables) == 0:
 
@@ -477,6 +477,42 @@ if uploaded_files:
                         header_row,
                         start_col
                     )
+
+                    # ============================================
+                    # FIND NEXT TABLE START
+                    # ============================================
+                    
+                    next_table_col = raw_df.shape[1]
+                    
+                    future_tables = sorted(
+                        [
+                            t["start_col"]
+                            for t in tables
+                            if t["start_col"] > start_col
+                        ]
+                    )
+                    
+                    if len(future_tables) > 0:
+                        next_table_col = future_tables[0]
+                    
+                    # ============================================
+                    # EXTRACT CURRENT TABLE ONLY
+                    # ============================================
+                    
+                    temp_df = raw_df.iloc[
+                        header_row:end_row + 1,
+                        start_col:next_table_col
+                    ].copy()
+                    
+                    # REMOVE FULLY EMPTY COLUMNS
+                    temp_df = temp_df.dropna(
+                        axis=1,
+                        how="all"
+                    )
+                    
+                    # SKIP EMPTY
+                    if temp_df.empty:
+                        continue
 
                     # temp_df = raw_df.iloc[
                     #     header_row + 1:end_row + 1,
