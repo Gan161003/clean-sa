@@ -271,7 +271,7 @@ def find_tables(df):
 
             seen.add(key)
 
-    return unique_tables
+    return tables
 
 # =========================================================
 # GET TABLE TITLE
