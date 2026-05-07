@@ -5,6 +5,7 @@ import os
 import re
 from io import BytesIO
 
+
 # =========================================================
 # PAGE CONFIG
 # =========================================================
@@ -148,6 +149,64 @@ def is_total_row(row):
     return False
 
 
+
+# =========================================================
+# VALID TABLE CHECK
+# =========================================================
+
+def is_valid_table(df):
+
+    cols = [str(c).lower() for c in df.columns]
+
+    # Must contain date
+    has_date = any("date" in c for c in cols)
+
+    # Must contain metrics
+    metric_count = sum(
+        any(x in c for x in [
+            "impression",
+            "click",
+            "view",
+            "spend",
+            "engagement"
+        ])
+        for c in cols
+    )
+
+    if not has_date:
+        return False
+
+    if metric_count == 0:
+        return False
+
+    # Minimum rows
+    if len(df) < 3:
+        return False
+
+    # Real dates check
+    date_col = None
+
+    for c in df.columns:
+
+        if "date" in str(c).lower():
+            date_col = c
+            break
+
+    if date_col is None:
+        return False
+
+    valid_dates = pd.to_datetime(
+        df[date_col],
+        errors="coerce"
+    ).notna().sum()
+
+    if valid_dates < 3:
+        return False
+
+    return True
+
+
+
 # =========================================================
 # FIND ALL TABLES
 # =========================================================
@@ -246,6 +305,9 @@ def get_table_title(df, header_row, start_col):
             return str(df.iat[r, start_col]).strip()
 
     return ""
+
+
+
 
 # =========================================================
 # STANDARDIZE DATAFRAME
@@ -376,6 +438,7 @@ if uploaded_files:
                 ).reset_index(drop=True)
 
                 tables = find_all_tables(raw_df)
+                processed_ranges = []
 
                 if len(tables) == 0:
 
@@ -393,6 +456,21 @@ if uploaded_files:
 
                     header_row = table["header_row"]
                     start_col = table["start_col"]
+
+                    # ============================================
+                    # SKIP OVERLAPPING HORIZONTAL TABLES
+                    # ============================================
+                    
+                    skip_table = False
+                    
+                    for s, e in processed_ranges:
+                    
+                        if start_col >= s and start_col <= e:
+                            skip_table = True
+                            break
+                    
+                    if skip_table:
+                        continue
 
                     end_row = find_table_end(
                         raw_df,
@@ -463,6 +541,8 @@ if uploaded_files:
                     temp_df = standardize_dataframe(temp_df)
 
                     temp_df = clean_numeric(temp_df)
+                    if not is_valid_table(temp_df):
+                        continue
 
                     # =============================================
                     # REMOVE EMPTY DATES
@@ -527,6 +607,28 @@ if uploaded_files:
                         :,
                         ~temp_df.columns.duplicated()
                     ]
+                    
+
+                    # =====================================
+                    # REMOVE DUPLICATES
+                    # =====================================
+                    
+                    temp_df = temp_df.drop_duplicates()
+                    
+                    # Skip empty
+                    if len(temp_df) == 0:
+                        continue
+                    
+                    # =====================================
+                    # REGISTER RANGE
+                    # =====================================
+                    
+                    processed_ranges.append(
+                        (
+                            start_col,
+                            start_col + temp_df.shape[1]
+                        )
+                    )
                     
                     all_data.append(temp_df)
 
