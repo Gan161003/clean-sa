@@ -23,15 +23,12 @@ COLUMN_MAP = {
 
     "date": [
         "date",
-        "day",
-        "time"
+        "day"
     ],
 
     "impressions": [
         "impression",
-        "impressions",
-        "display",
-        "displays"
+        "impressions"
     ],
 
     "clicks": [
@@ -43,14 +40,12 @@ COLUMN_MAP = {
 
     "views": [
         "view",
-        "views",
-        "video views"
+        "views"
     ],
 
     "spends": [
         "spend",
-        "cost",
-        "amount spent"
+        "cost"
     ],
 
     "engagements": [
@@ -127,11 +122,22 @@ def is_total_row(row):
     return False
 
 
+def clean_numeric(series):
+
+    return (
+        series.astype(str)
+        .str.replace(",", "", regex=False)
+        .str.replace("%", "", regex=False)
+        .str.strip()
+        .replace("", np.nan)
+    )
+
+
 # =========================================================
-# FIND ALL TABLES
+# FIND TABLES
 # =========================================================
 
-def find_all_tables(df):
+def find_tables(df):
 
     tables = []
 
@@ -141,93 +147,43 @@ def find_all_tables(df):
 
         for c in range(cols):
 
-            cell = clean_string(df.iat[r, c])
-
-            # TABLE MUST START WITH DATE
-            if "date" not in cell:
-                continue
-
-            matched_headers = {}
-
-            for scan_c in range(c, min(c + 8, cols)):
-
-                scan_cell = clean_string(
-                    df.iat[r, scan_c]
-                )
-
-                mapped = map_column(scan_cell)
-
-                if mapped:
-                    matched_headers[mapped] = scan_c
-
-            # MUST HAVE DATE + 1 METRIC
-            metric_count = len(
-                [
-                    x for x in matched_headers
-                    if x != "date"
-                ]
+            val = clean_string(
+                df.iat[r, c]
             )
 
-            if metric_count >= 1:
+            if val != "date":
+                continue
+
+            # CHECK NEXT 4 COLS
+            headers = []
+
+            for x in range(c, min(c + 5, cols)):
+
+                cell = clean_string(
+                    df.iat[r + 1, x]
+                )
+
+                headers.append(cell)
+
+            # MUST HAVE IMPRESSION + CLICKS
+            has_imp = any(
+                "impression" in h
+                for h in headers
+            )
+
+            has_click = any(
+                "click" in h or "tap" in h
+                for h in headers
+            )
+
+            if has_imp and has_click:
 
                 tables.append({
                     "header_row": r,
                     "start_col": c
                 })
 
-    # REMOVE OVERLAPPING TABLES
-
-    final_tables = []
-
-    used_positions = set()
-
-    for t in tables:
-
-        key = (
-            t["header_row"],
-            t["start_col"]
-        )
-
-        if key in used_positions:
-            continue
-
-        final_tables.append(t)
-
-        for i in range(
-            t["start_col"],
-            t["start_col"] + 5
-        ):
-
-            used_positions.add(
-                (t["header_row"], i)
-            )
-
-    return final_tables
-
-
-# =========================================================
-# FIND TABLE END
-# =========================================================
-
-def find_table_end(df, start_row):
-
-    blank_count = 0
-
-    for r in range(start_row + 1, len(df)):
-
-        row_data = df.iloc[r]
-
-        non_blank = row_data.notna().sum()
-
-        if non_blank == 0:
-            blank_count += 1
-        else:
-            blank_count = 0
-
-        if blank_count >= 2:
-            return r - 2
-
-    return len(df) - 1
+    return tables
 
 
 # =========================================================
@@ -249,52 +205,54 @@ def get_table_title(
         if r < 0:
             continue
 
-        val = clean_string(
-            df.iat[r, start_col]
-        )
+        val = df.iat[r, start_col]
 
-        if val != "" and "date" not in val:
+        if pd.notna(val):
 
-            return str(
-                df.iat[r, start_col]
-            ).strip()
+            val = str(val).strip()
+
+            if (
+                val != ""
+                and val.lower() != "date"
+            ):
+                return val
 
     return ""
 
 
 # =========================================================
-# CLEAN NUMERIC
+# FIND TABLE END
 # =========================================================
 
-def clean_numeric(df):
+def find_table_end(
+    df,
+    start_row,
+    start_col
+):
 
-    numeric_cols = [
-        "impressions",
-        "clicks",
-        "views",
-        "spends",
-        "engagements"
-    ]
+    blank_count = 0
 
-    for col in numeric_cols:
+    for r in range(start_row + 2, len(df)):
 
-        if col not in df.columns:
-            df[col] = ""
+        row_slice = df.iloc[
+            r,
+            start_col:start_col + 5
+        ]
 
-        df[col] = (
-            df[col]
-            .astype(str)
-            .str.replace(",", "", regex=False)
-            .str.replace("%", "", regex=False)
-            .str.strip()
-        )
+        non_blank = row_slice.notna().sum()
 
-        df[col] = df[col].replace(
-            ["", "nan", "None"],
-            np.nan
-        )
+        if non_blank == 0:
 
-    return df
+            blank_count += 1
+
+        else:
+
+            blank_count = 0
+
+        if blank_count >= 2:
+            return r - 2
+
+    return len(df) - 1
 
 
 # =========================================================
@@ -333,10 +291,11 @@ if uploaded_files:
                 uploaded_file
             )
 
-        except:
+        except Exception as e:
 
             st.error(
-                f"Cannot open: {uploaded_file.name}"
+                f"Cannot open file: "
+                f"{uploaded_file.name}"
             )
 
             continue
@@ -355,19 +314,11 @@ if uploaded_files:
                     header=None
                 )
 
-                # =========================================
-                # FIX HORIZONTAL MERGED CELLS
-                # =========================================
-
-                raw_df = raw_df.ffill(axis=1)
-
                 raw_df = raw_df.dropna(
                     how="all"
                 ).reset_index(drop=True)
 
-                tables = find_all_tables(
-                    raw_df
-                )
+                tables = find_tables(raw_df)
 
                 if len(tables) == 0:
                     continue
@@ -388,126 +339,67 @@ if uploaded_files:
 
                     end_row = find_table_end(
                         raw_df,
-                        header_row
+                        header_row,
+                        start_col
                     )
 
                     # =================================================
-                    # EXTRACT TABLE
+                    # EXTRACT DATA
                     # =================================================
-
-                    TABLE_WIDTH = 5
 
                     temp_df = raw_df.iloc[
                         header_row + 2:end_row + 1,
-                        start_col:start_col + TABLE_WIDTH
+                        start_col:start_col + 5
                     ].copy()
 
-                    temp_df = temp_df.dropna(
-                        axis=1,
-                        how="all"
-                    )
-
-                    if temp_df.empty:
-                        continue
-
                     # =================================================
-                    # MULTI HEADER EXTRACTION
+                    # HEADERS
                     # =================================================
 
-                    actual_columns = []
+                    actual_headers = []
 
-                    used_headers = {}
-
-                    for idx_col in range(
-                        len(temp_df.columns)
+                    for c in range(
+                        start_col,
+                        start_col + 5
                     ):
 
-                        c = temp_df.columns[idx_col]
+                        val = raw_df.iat[
+                            header_row + 1,
+                            c
+                        ]
 
-                        top_header = clean_string(
-                            raw_df.iat[
-                                header_row,
-                                c
-                            ]
+                        actual_headers.append(
+                            str(val).strip()
                         )
 
-                        second_header = clean_string(
-                            raw_df.iat[
-                                header_row + 1,
-                                c
-                            ]
-                        )
+                    # FIRST COL ALWAYS DATE
+                    actual_headers[0] = "date"
 
-                        # USE SECOND HEADER
-                        if second_header != "":
-                            header_value = second_header
-                        else:
-                            header_value = top_header
-
-                        if header_value == "":
-                            header_value = (
-                                f"unknown_{idx_col}"
-                            )
-
-                        # HANDLE DUPLICATES
-                        if header_value in used_headers:
-
-                            used_headers[
-                                header_value
-                            ] += 1
-
-                            header_value = (
-                                f"{header_value}_"
-                                f"{used_headers[header_value]}"
-                            )
-
-                        else:
-
-                            used_headers[
-                                header_value
-                            ] = 0
-
-                        actual_columns.append(
-                            header_value
-                        )
-
-                    temp_df.columns = actual_columns
+                    temp_df.columns = actual_headers
 
                     # =================================================
                     # REMOVE TOTAL ROWS
                     # =================================================
 
-                    mask = temp_df.apply(
-                        lambda row:
-                        is_total_row(row),
-                        axis=1
-                    )
-
-                    temp_df = temp_df[~mask]
+                    temp_df = temp_df[
+                        ~temp_df.apply(
+                            is_total_row,
+                            axis=1
+                        )
+                    ]
 
                     # =================================================
-                    # STANDARDIZE COLUMNS
+                    # STANDARDIZE
                     # =================================================
 
                     mapped_columns = {}
-
-                    used_cols = set()
 
                     for col in temp_df.columns:
 
                         mapped = map_column(col)
 
                         if mapped:
-
-                            if mapped not in used_cols:
-
-                                mapped_columns[
-                                    col
-                                ] = mapped
-
-                                used_cols.add(
-                                    mapped
-                                )
+                            mapped_columns[col] = mapped
 
                     temp_df = temp_df.rename(
                         columns=mapped_columns
@@ -529,60 +421,63 @@ if uploaded_files:
                     for col in required_cols:
 
                         if col not in temp_df.columns:
-                            temp_df[col] = ""
+                            temp_df[col] = np.nan
 
                     temp_df = temp_df[
                         required_cols
                     ]
 
                     # =================================================
-                    # REMOVE EMPTY DATES
+                    # REMOVE EMPTY DATE
                     # =================================================
 
                     temp_df = temp_df[
                         temp_df["date"]
-                        .astype(str)
-                        .str.strip() != ""
+                        .notna()
                     ]
 
                     # =================================================
-                    # REMOVE INVALID DATES
+                    # DATE PARSE
                     # =================================================
 
-                    temp_df["parsed_date"] = pd.to_datetime(
+                    temp_df["date"] = pd.to_datetime(
                         temp_df["date"],
                         errors="coerce"
                     )
 
                     temp_df = temp_df[
-                        temp_df["parsed_date"].notna()
+                        temp_df["date"].notna()
                     ]
-
-                    temp_df = temp_df.drop(
-                        columns=["parsed_date"]
-                    )
 
                     if len(temp_df) == 0:
                         continue
 
                     # =================================================
-                    # CLEAN NUMERIC
+                    # CLEAN NUMBERS
                     # =================================================
 
-                    temp_df = clean_numeric(
-                        temp_df
-                    )
+                    numeric_cols = [
+                        "impressions",
+                        "clicks",
+                        "views",
+                        "spends",
+                        "engagements"
+                    ]
 
-                    # =================================================
-                    # TABLE TITLE
-                    # =================================================
+                    for col in numeric_cols:
 
-                    table_title = (
-                        get_table_title(
-                            raw_df,
-                            header_row,
-                            start_col
+                        temp_df[col] = clean_numeric(
+                            temp_df[col]
                         )
+
+                    # =================================================
+                    # TITLE
+                    # =================================================
+
+                    table_title = get_table_title(
+                        raw_df,
+                        header_row,
+                        start_col
                     )
 
                     # =================================================
@@ -627,16 +522,9 @@ if uploaded_files:
                         final_cols
                     ]
 
-                    temp_df = (
-                        temp_df
-                        .drop_duplicates()
-                    )
+                    temp_df = temp_df.drop_duplicates()
 
-                    if len(temp_df) > 0:
-
-                        all_data.append(
-                            temp_df
-                        )
+                    all_data.append(temp_df)
 
             except Exception as e:
 
@@ -661,10 +549,7 @@ if uploaded_files:
             ignore_index=True
         )
 
-        final_df = (
-            final_df
-            .drop_duplicates()
-        )
+        final_df = final_df.drop_duplicates()
 
         st.success(
             "✅ Processing Completed"
@@ -712,4 +597,3 @@ if uploaded_files:
     else:
 
         st.error("❌ No Data Extracted")
-
