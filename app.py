@@ -130,60 +130,58 @@ def is_total_row(row):
 # =========================================================
 # FIND ALL TABLES
 # =========================================================
-
 def find_all_tables(df):
 
     tables = []
 
     rows, cols = df.shape
 
-    for r in range(rows - 1):
+    for r in range(rows):
 
         for c in range(cols):
 
+            cell = clean_string(df.iat[r, c])
+
+            # TABLE MUST START WITH DATE
+            if "date" not in cell:
+                continue
+
             matched_headers = {}
 
-            for scan_c in range(
-                c,
-                min(c + 8, cols)
-            ):
+            for scan_c in range(c, min(c + 8, cols)):
 
-                cell1 = clean_string(
+                scan_cell = clean_string(
                     df.iat[r, scan_c]
                 )
 
-                cell2 = clean_string(
-                    df.iat[r + 1, scan_c]
-                )
+                mapped = map_column(scan_cell)
 
-                mapped1 = map_column(cell1)
-                mapped2 = map_column(cell2)
+                if mapped:
+                    matched_headers[mapped] = scan_c
 
-                if mapped1:
-                    matched_headers[mapped1] = scan_c
+            # MUST HAVE DATE + 1 METRIC
+            metric_count = len(
+                [
+                    x for x in matched_headers
+                    if x != "date"
+                ]
+            )
 
-                if mapped2:
-                    matched_headers[mapped2] = scan_c
-
-            has_date = "date" in matched_headers
-
-            metric_count = len([
-                k for k in matched_headers
-                if k != "date"
-            ])
-
-            if has_date and metric_count >= 1:
+            if metric_count >= 1:
 
                 tables.append({
                     "header_row": r,
-                    "start_col": c
+                    "start_col": c,
+                    "headers": matched_headers
                 })
 
-    # REMOVE DUPLICATES
+    # =========================================
+    # REMOVE OVERLAPPING TABLES
+    # =========================================
 
-    unique_tables = []
+    final_tables = []
 
-    seen = set()
+    used_positions = set()
 
     for t in tables:
 
@@ -192,13 +190,22 @@ def find_all_tables(df):
             t["start_col"]
         )
 
-        if key not in seen:
+        if key in used_positions:
+            continue
 
-            unique_tables.append(t)
-            seen.add(key)
+        final_tables.append(t)
 
-    return unique_tables
+        # BLOCK NEARBY COLUMNS
+        for i in range(
+            t["start_col"],
+            t["start_col"] + 5
+        ):
 
+            used_positions.add(
+                (t["header_row"], i)
+            )
+
+    return final_tables
 
 # =========================================================
 # FIND TABLE END
