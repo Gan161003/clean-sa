@@ -140,44 +140,197 @@ def clean_numeric(series):
 
 
 # =========================================================
-# VERTICAL HEADER DETECTION
+# DETECT FILE TYPE
 # =========================================================
 
-def find_vertical_header_row(df):
+def detect_file_type(df):
+
+    rows, cols = df.shape
+
+    horizontal_score = 0
+
+    for r in range(min(15, rows)):
+
+        row_values = [
+            clean_string(x)
+            for x in df.iloc[r].tolist()
+        ]
+
+        date_count = row_values.count("date")
+
+        if date_count >= 2:
+            horizontal_score += 5
+
+    for r in range(min(15, rows)):
+
+        row_values = " ".join([
+            clean_string(x)
+            for x in df.iloc[r].tolist()
+        ])
+
+        if row_values.count("impression") >= 2:
+            horizontal_score += 3
+
+    if horizontal_score >= 5:
+        return "horizontal"
+
+    return "vertical"
+
+
+# =========================================================
+# VERTICAL PARSER
+# =========================================================
+
+def find_header_row(df):
 
     best_row = None
     best_score = 0
 
-    for r in range(min(20, len(df))):
+    for i in range(min(20, len(df))):
+
+        row = df.iloc[i].tolist()
 
         score = 0
 
-        row = df.iloc[r]
+        for cell in row:
 
-        for val in row:
-
-            val = clean_string(val)
+            cell_clean = clean_string(cell)
 
             for aliases in COLUMN_MAP.values():
 
                 for alias in aliases:
 
-                    if alias in val:
+                    if alias in cell_clean:
                         score += 1
 
         if score > best_score:
 
             best_score = score
-            best_row = r
+            best_row = i
 
-    if best_score >= 3:
-        return best_row
+    return best_row
 
-    return None
+
+def standardize_dataframe(df):
+
+    mapped_columns = {}
+
+    for col in df.columns:
+
+        mapped = map_column(col)
+
+        if mapped:
+            mapped_columns[col] = mapped
+
+    df = df.rename(columns=mapped_columns)
+
+    final_cols = [
+        "date",
+        "impressions",
+        "clicks",
+        "views",
+        "spends",
+        "engagements"
+    ]
+
+    for col in final_cols:
+
+        if col not in df.columns:
+            df[col] = np.nan
+
+    return df[final_cols]
+
+
+def process_vertical_sheet(
+    raw_df,
+    file_name,
+    sheet_name,
+    unique_key
+):
+
+    all_tables = []
+
+    header_row = find_header_row(raw_df)
+
+    if header_row is None:
+        return None
+
+    df = pd.DataFrame(
+        raw_df.iloc[header_row + 1:].values,
+        columns=raw_df.iloc[header_row]
+    )
+
+    # IMPORTANT
+    df = df.ffill()
+
+    df = df.dropna(how="all")
+
+    mask = df.apply(
+        lambda row: is_total_row(row),
+        axis=1
+    )
+
+    df = df[~mask]
+
+    df = standardize_dataframe(df)
+
+    df = df[
+        df["date"].astype(str).str.strip() != ""
+    ]
+
+    # DATE
+    df["date"] = pd.to_datetime(
+        df["date"],
+        errors="coerce"
+    )
+
+    df = df[df["date"].notna()]
+
+    # NUMERIC
+    numeric_cols = [
+        "impressions",
+        "clicks",
+        "views",
+        "spends",
+        "engagements"
+    ]
+
+    for col in numeric_cols:
+        df[col] = clean_numeric(df[col])
+
+    df["creative"] = sheet_name
+    df["unique_key"] = unique_key
+    df["source_file"] = file_name
+    df["sheet_name"] = sheet_name
+
+    final_cols = [
+        "unique_key",
+        "creative",
+        "date",
+        "impressions",
+        "clicks",
+        "views",
+        "spends",
+        "engagements",
+        "source_file",
+        "sheet_name"
+    ]
+
+    df = df[final_cols]
+
+    all_tables.append(df)
+
+    if len(all_tables) == 0:
+        return None
+
+    return pd.concat(
+        all_tables,
+        ignore_index=True
+    )
 
 
 # =========================================================
-# HORIZONTAL TABLE DETECTION
+# HORIZONTAL PARSER
 # =========================================================
 
 def find_horizontal_tables(df):
@@ -228,10 +381,8 @@ def find_horizontal_tables(df):
             if found_imp and found_click:
 
                 tables.append({
-
                     "header_row": r,
                     "start_col": c
-
                 })
 
     # REMOVE DUPLICATES
@@ -253,10 +404,6 @@ def find_horizontal_tables(df):
 
     return unique_tables
 
-
-# =========================================================
-# GET TABLE TITLE
-# =========================================================
 
 def get_table_title(
     df,
@@ -288,10 +435,6 @@ def get_table_title(
     return ""
 
 
-# =========================================================
-# FIND TABLE END
-# =========================================================
-
 def find_table_end(
     df,
     start_row,
@@ -310,11 +453,8 @@ def find_table_end(
         non_blank = row_slice.notna().sum()
 
         if non_blank == 0:
-
             blank_count += 1
-
         else:
-
             blank_count = 0
 
         if blank_count >= 2:
@@ -323,44 +463,175 @@ def find_table_end(
     return len(df) - 1
 
 
-# =========================================================
-# STANDARDIZE DF
-# =========================================================
+def process_horizontal_sheet(
+    raw_df,
+    file_name,
+    sheet_name,
+    unique_key
+):
 
-def standardize_dataframe(df):
+    all_tables = []
 
-    mapped_columns = {}
+    tables = find_horizontal_tables(raw_df)
 
-    used = set()
+    processed = set()
 
-    for col in df.columns:
+    for table in tables:
 
-        mapped = map_column(col)
+        header_row = table["header_row"]
+        start_col = table["start_col"]
 
-        if mapped and mapped not in used:
+        # AVOID DUPLICATE TABLES
+        table_key = (
+            header_row,
+            start_col
+        )
 
-            mapped_columns[col] = mapped
-            used.add(mapped)
+        if table_key in processed:
+            continue
 
-    df = df.rename(
-        columns=mapped_columns
+        processed.add(table_key)
+
+        end_row = find_table_end(
+            raw_df,
+            header_row,
+            start_col
+        )
+
+        temp_df = raw_df.iloc[
+            header_row + 2:end_row + 1,
+            start_col:start_col + 6
+        ].copy()
+
+        if temp_df.empty:
+            continue
+
+        actual_headers = []
+
+        total_cols = temp_df.shape[1]
+
+        for c in range(total_cols):
+
+            header_val = raw_df.iat[
+                header_row + 1,
+                start_col + c
+            ]
+
+            actual_headers.append(
+                str(header_val).strip()
+            )
+
+        actual_headers[0] = "date"
+
+        temp_df.columns = actual_headers
+
+        # ONLY DATE FFILL
+        temp_df.iloc[:, 0] = (
+            temp_df.iloc[:, 0].ffill()
+        )
+
+        # REMOVE TOTAL
+        temp_df = temp_df[
+            ~temp_df.apply(
+                is_total_row,
+                axis=1
+            )
+        ]
+
+        mapped_columns = {}
+
+        for col in temp_df.columns:
+
+            mapped = map_column(col)
+
+            if mapped:
+                mapped_columns[col] = mapped
+
+        temp_df = temp_df.rename(
+            columns=mapped_columns
+        )
+
+        required_cols = [
+            "date",
+            "impressions",
+            "clicks",
+            "views",
+            "spends",
+            "engagements"
+        ]
+
+        for col in required_cols:
+
+            if col not in temp_df.columns:
+                temp_df[col] = np.nan
+
+        temp_df = temp_df[required_cols]
+
+        # DATE
+        temp_df["date"] = pd.to_datetime(
+            temp_df["date"],
+            errors="coerce"
+        )
+
+        temp_df = temp_df[
+            temp_df["date"].notna()
+        ]
+
+        if len(temp_df) == 0:
+            continue
+
+        # NUMERIC
+        numeric_cols = [
+            "impressions",
+            "clicks",
+            "views",
+            "spends",
+            "engagements"
+        ]
+
+        for col in numeric_cols:
+            temp_df[col] = clean_numeric(
+                temp_df[col]
+            )
+
+        table_title = get_table_title(
+            raw_df,
+            header_row,
+            start_col
+        )
+
+        temp_df["creative"] = table_title
+        temp_df["unique_key"] = unique_key
+        temp_df["source_file"] = file_name
+        temp_df["sheet_name"] = sheet_name
+
+        final_cols = [
+
+            "unique_key",
+            "creative",
+            "date",
+            "impressions",
+            "clicks",
+            "views",
+            "spends",
+            "engagements",
+            "source_file",
+            "sheet_name"
+        ]
+
+        temp_df = temp_df[final_cols]
+
+        temp_df = temp_df.drop_duplicates()
+
+        all_tables.append(temp_df)
+
+    if len(all_tables) == 0:
+        return None
+
+    return pd.concat(
+        all_tables,
+        ignore_index=True
     )
-
-    final_cols = [
-        "date",
-        "impressions",
-        "clicks",
-        "views",
-        "spends",
-        "engagements"
-    ]
-
-    for col in final_cols:
-
-        if col not in df.columns:
-            df[col] = np.nan
-
-    return df[final_cols]
 
 
 # =========================================================
@@ -374,7 +645,7 @@ uploaded_files = st.file_uploader(
 )
 
 # =========================================================
-# PROCESS
+# MAIN PROCESS
 # =========================================================
 
 if uploaded_files:
@@ -402,13 +673,14 @@ if uploaded_files:
         except Exception as e:
 
             st.error(
-                f"Cannot open file: {uploaded_file.name}"
+                f"Cannot open file: "
+                f"{uploaded_file.name}"
             )
 
             continue
 
         # =====================================================
-        # LOOP SHEETS
+        # SHEETS
         # =====================================================
 
         for sheet_name in excel_file.sheet_names:
@@ -421,302 +693,50 @@ if uploaded_files:
                     header=None
                 )
 
-                # IMPORTANT
-                # FIX MERGED DATE CELLS
-                raw_df = raw_df.ffill()
-
                 raw_df = raw_df.dropna(
                     how="all"
                 ).reset_index(drop=True)
 
-                # =================================================
-                # TRY HORIZONTAL FIRST
-                # =================================================
-
-                horizontal_tables = find_horizontal_tables(
+                file_type = detect_file_type(
                     raw_df
                 )
 
-                processed_horizontal = False
+                st.write(
+                    f"{sheet_name} → {file_type}"
+                )
 
-                if len(horizontal_tables) > 1:
+                # =============================================
+                # HORIZONTAL
+                # =============================================
 
-                    processed_horizontal = True
+                if file_type == "horizontal":
 
-                    processed_keys = set()
-
-                    for table in horizontal_tables:
-
-                        header_row = table[
-                            "header_row"
-                        ]
-
-                        start_col = table[
-                            "start_col"
-                        ]
-
-                        # PREVENT DUPLICATE TABLES
-                        unique_table_key = (
-                            header_row,
-                            start_col
-                        )
-
-                        if unique_table_key in processed_keys:
-                            continue
-
-                        processed_keys.add(
-                            unique_table_key
-                        )
-
-                        end_row = find_table_end(
-                            raw_df,
-                            header_row,
-                            start_col
-                        )
-
-                        temp_df = raw_df.iloc[
-                            header_row + 2:end_row + 1,
-                            start_col:start_col + 6
-                        ].copy()
-
-                        temp_df = temp_df.dropna(
-                            axis=1,
-                            how="all"
-                        )
-
-                        if temp_df.empty:
-                            continue
-
-                        # =====================================
-                        # HEADERS
-                        # =====================================
-
-                        actual_headers = []
-
-                        total_cols = temp_df.shape[1]
-
-                        for c in range(total_cols):
-
-                            real_col = start_col + c
-
-                            val = raw_df.iat[
-                                header_row + 1,
-                                real_col
-                            ]
-
-                            actual_headers.append(
-                                str(val).strip()
-                            )
-
-                        # FIX DATE HEADER
-                        actual_headers[0] = "date"
-
-                        # LENGTH FIX
-                        if len(actual_headers) != len(temp_df.columns):
-
-                            actual_headers = actual_headers[
-                                :len(temp_df.columns)
-                            ]
-
-                        temp_df.columns = actual_headers
-
-                        # REMOVE TOTAL ROWS
-                        temp_df = temp_df[
-                            ~temp_df.apply(
-                                is_total_row,
-                                axis=1
-                            )
-                        ]
-
-                        # STANDARDIZE
-                        temp_df = standardize_dataframe(
-                            temp_df
-                        )
-
-                        # REMOVE EMPTY DATES
-                        temp_df = temp_df[
-                            temp_df["date"].notna()
-                        ]
-
-                        # DATE PARSE
-                        temp_df["date"] = pd.to_datetime(
-                            temp_df["date"],
-                            errors="coerce"
-                        )
-
-                        temp_df = temp_df[
-                            temp_df["date"].notna()
-                        ]
-
-                        if len(temp_df) == 0:
-                            continue
-
-                        # CLEAN NUMBERS
-                        numeric_cols = [
-                            "impressions",
-                            "clicks",
-                            "views",
-                            "spends",
-                            "engagements"
-                        ]
-
-                        for col in numeric_cols:
-
-                            temp_df[col] = clean_numeric(
-                                temp_df[col]
-                            )
-
-                        # TABLE TITLE
-                        table_title = get_table_title(
-                            raw_df,
-                            header_row,
-                            start_col
-                        )
-
-                        # EXTRA COLS
-                        temp_df["creative"] = (
-                            table_title
-                        )
-
-                        temp_df["unique_key"] = (
-                            unique_key
-                        )
-
-                        temp_df["source_file"] = (
-                            uploaded_file.name
-                        )
-
-                        temp_df["sheet_name"] = (
-                            sheet_name
-                        )
-
-                        final_cols = [
-
-                            "unique_key",
-                            "creative",
-                            "date",
-                            "impressions",
-                            "clicks",
-                            "views",
-                            "spends",
-                            "engagements",
-                            "source_file",
-                            "sheet_name"
-                        ]
-
-                        temp_df = temp_df[
-                            final_cols
-                        ]
-
-                        temp_df = temp_df.drop_duplicates()
-
-                        all_data.append(temp_df)
-
-                # =================================================
-                # OTHERWISE PROCESS VERTICAL
-                # =================================================
-
-                if not processed_horizontal:
-
-                    header_row = find_vertical_header_row(
-                        raw_df
+                    result = process_horizontal_sheet(
+                        raw_df,
+                        uploaded_file.name,
+                        sheet_name,
+                        unique_key
                     )
 
-                    if header_row is None:
-                        continue
+                # =============================================
+                # VERTICAL
+                # =============================================
 
-                    df = pd.read_excel(
-                        uploaded_file,
-                        sheet_name=sheet_name,
-                        header=header_row
+                else:
+
+                    result = process_vertical_sheet(
+                        raw_df,
+                        uploaded_file.name,
+                        sheet_name,
+                        unique_key
                     )
 
-                    # IMPORTANT
-                    # FIX MERGED CELLS
-                    df = df.ffill()
-
-                    df = df.dropna(
-                        how="all"
-                    )
-
-                    # REMOVE TOTALS
-                    mask = df.apply(
-                        lambda row: is_total_row(row),
-                        axis=1
-                    )
-
-                    df = df[~mask]
-
-                    # STANDARDIZE
-                    df = standardize_dataframe(df)
-
-                    # CLEAN NUMBERS
-                    numeric_cols = [
-                        "impressions",
-                        "clicks",
-                        "views",
-                        "spends",
-                        "engagements"
-                    ]
-
-                    for col in numeric_cols:
-
-                        df[col] = clean_numeric(
-                            df[col]
-                        )
-
-                    # REMOVE EMPTY DATE
-                    df = df[
-                        df["date"]
-                        .astype(str)
-                        .str.strip() != ""
-                    ]
-
-                    # DATE PARSE
-                    df["date"] = pd.to_datetime(
-                        df["date"],
-                        errors="coerce"
-                    )
-
-                    df = df[
-                        df["date"].notna()
-                    ]
-
-                    if len(df) == 0:
-                        continue
-
-                    # EXTRA COLS
-                    df["creative"] = sheet_name
-
-                    df["unique_key"] = unique_key
-
-                    df["source_file"] = (
-                        uploaded_file.name
-                    )
-
-                    df["sheet_name"] = sheet_name
-
-                    final_cols = [
-
-                        "unique_key",
-                        "creative",
-                        "date",
-                        "impressions",
-                        "clicks",
-                        "views",
-                        "spends",
-                        "engagements",
-                        "source_file",
-                        "sheet_name"
-                    ]
-
-                    df = df[
-                        final_cols
-                    ]
-
-                    df = df.drop_duplicates()
-
-                    all_data.append(df)
+                if (
+                    result is not None
+                    and
+                    len(result) > 0
+                ):
+                    all_data.append(result)
 
             except Exception as e:
 
