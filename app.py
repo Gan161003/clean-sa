@@ -140,14 +140,12 @@ def clean_numeric(series):
 
 
 # =========================================================
-# DETECT HORIZONTAL FILE
+# DETECT HORIZONTAL LAYOUT
 # =========================================================
 
 def is_horizontal_layout(df):
 
     rows, cols = df.shape
-
-    table_count = 0
 
     for r in range(min(10, rows)):
 
@@ -159,13 +157,13 @@ def is_horizontal_layout(df):
         date_count = row_values.count("date")
 
         if date_count >= 2:
-            table_count += 1
+            return True
 
-    return table_count > 0
+    return False
 
 
 # =========================================================
-# VERTICAL HEADER FINDER
+# VERTICAL LOGIC
 # =========================================================
 
 def find_header_row(df):
@@ -198,24 +196,22 @@ def find_header_row(df):
     return best_row
 
 
-# =========================================================
-# STANDARDIZE
-# =========================================================
-
 def standardize_dataframe(df):
 
     mapped_columns = {}
 
-    used = set()
+    used_cols = set()
 
     for col in df.columns:
 
         mapped = map_column(col)
 
-        if mapped and mapped not in used:
+        if mapped:
 
-            mapped_columns[col] = mapped
-            used.add(mapped)
+            if mapped not in used_cols:
+
+                mapped_columns[col] = mapped
+                used_cols.add(mapped)
 
     df = df.rename(columns=mapped_columns)
 
@@ -237,7 +233,7 @@ def standardize_dataframe(df):
 
 
 # =========================================================
-# HORIZONTAL TABLE FINDER
+# HORIZONTAL LOGIC
 # =========================================================
 
 def find_horizontal_tables(df):
@@ -262,7 +258,7 @@ def find_horizontal_tables(df):
 
             for scan_c in range(
                 c,
-                min(c + 6, cols)
+                min(c + 5, cols)
             ):
 
                 val1 = clean_string(
@@ -273,7 +269,9 @@ def find_horizontal_tables(df):
                     df.iat[r + 1, scan_c]
                 )
 
-                combined = val1 + " " + val2
+                combined = (
+                    val1 + " " + val2
+                )
 
                 if "impression" in combined:
                     found_imp = True
@@ -315,10 +313,6 @@ def find_horizontal_tables(df):
     return unique_tables
 
 
-# =========================================================
-# HORIZONTAL TABLE END
-# =========================================================
-
 def find_horizontal_table_end(
     df,
     start_row,
@@ -331,7 +325,7 @@ def find_horizontal_table_end(
 
         row_slice = df.iloc[
             r,
-            start_col:start_col + 6
+            start_col:start_col + 5
         ]
 
         non_blank = row_slice.notna().sum()
@@ -349,10 +343,6 @@ def find_horizontal_table_end(
 
     return len(df) - 1
 
-
-# =========================================================
-# GET TABLE TITLE
-# =========================================================
 
 def get_table_title(
     df,
@@ -494,7 +484,15 @@ if uploaded_files:
                                 str(val).strip()
                             )
 
+                        # FORCE FIRST COL DATE
+
                         actual_headers[0] = "date"
+
+                        # HANDLE HEADER LENGTH ISSUE
+
+                        actual_headers = actual_headers[
+                            :len(temp_df.columns)
+                        ]
 
                         temp_df.columns = actual_headers
 
@@ -620,14 +618,18 @@ if uploaded_files:
                         header=header_row
                     )
 
-                    # ONLY FILL DATE COLS
+                    # ONLY FILL DATE COLUMNS
 
                     for col in df.columns:
 
+                        col_clean = clean_string(col)
+
                         if (
-                            "date" in clean_string(col)
+                            "date" in col_clean
                             or
-                            "day" in clean_string(col)
+                            "day" in col_clean
+                            or
+                            "time" in col_clean
                         ):
 
                             df[col] = df[col].ffill()
@@ -643,6 +645,8 @@ if uploaded_files:
 
                     df = standardize_dataframe(df)
 
+                    # DATE PARSE
+
                     df["date"] = pd.to_datetime(
                         df["date"],
                         errors="coerce"
@@ -655,10 +659,7 @@ if uploaded_files:
                     if len(df) == 0:
                         continue
 
-                    df["unique_key"] = unique_key
-                    df["creative"] = sheet_name
-                    df["source_file"] = uploaded_file.name
-                    df["sheet_name"] = sheet_name
+                    # CLEAN NUMBERS
 
                     numeric_cols = [
                         "impressions",
@@ -673,6 +674,22 @@ if uploaded_files:
                         df[col] = clean_numeric(
                             df[col]
                         )
+
+                    # EXTRA COLS
+
+                    df["creative"] = sheet_name
+
+                    df["unique_key"] = (
+                        unique_key
+                    )
+
+                    df["source_file"] = (
+                        uploaded_file.name
+                    )
+
+                    df["sheet_name"] = (
+                        sheet_name
+                    )
 
                     final_cols = [
 
