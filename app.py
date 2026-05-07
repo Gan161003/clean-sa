@@ -186,7 +186,92 @@ def clean_numeric(series):
 #     return tables
 
 
+# =========================================================
+# FIND TABLES
+# =========================================================
 
+def find_tables(df):
+
+    tables = []
+
+    rows, cols = df.shape
+
+    for r in range(rows - 1):
+
+        for c in range(cols):
+
+            current = clean_string(
+                df.iat[r, c]
+            )
+
+            # TABLE MUST START WITH DATE
+            if current != "date":
+                continue
+
+            found_imp = False
+            found_click = False
+
+            # CHECK NEXT 6 COLS
+            for scan_c in range(
+                c,
+                min(c + 6, cols)
+            ):
+
+                # CHECK CURRENT ROW
+                val1 = clean_string(
+                    df.iat[r, scan_c]
+                )
+
+                # CHECK NEXT ROW
+                val2 = clean_string(
+                    df.iat[r + 1, scan_c]
+                )
+
+                combined = (
+                    val1 + " " + val2
+                )
+
+                if "impression" in combined:
+
+                    found_imp = True
+
+                if (
+                    "click" in combined
+                    or
+                    "tap" in combined
+                ):
+
+                    found_click = True
+
+            # VALID TABLE
+            if found_imp and found_click:
+
+                tables.append({
+
+                    "header_row": r,
+                    "start_col": c
+
+                })
+
+    # REMOVE DUPLICATES
+    unique_tables = []
+
+    seen = set()
+
+    for t in tables:
+
+        key = (
+            t["header_row"],
+            t["start_col"]
+        )
+
+        if key not in seen:
+
+            unique_tables.append(t)
+
+            seen.add(key)
+
+    return unique_tables
 
 # =========================================================
 # GET TABLE TITLE
