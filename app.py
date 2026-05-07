@@ -76,9 +76,9 @@ def clean_string(x):
 def extract_unique_key(filename):
 
     patterns = [
-        r"(1ur-\d+)",
-        r"(tur-\d+)",
-        r"(ur-\d+)"
+        r"(1ur-[A-Za-z0-9]+)",
+        r"(tur-[A-Za-z0-9]+)",
+        r"(ur-[A-Za-z0-9]+)"
     ]
 
     for pattern in patterns:
