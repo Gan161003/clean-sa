@@ -255,12 +255,19 @@ def standardize_dataframe(df):
 
     mapped_columns = {}
 
+    used_cols = set()
+
     for col in df.columns:
 
         mapped = map_column(col)
 
         if mapped:
-            mapped_columns[col] = mapped
+
+            # Avoid duplicate renamed columns
+            if mapped not in used_cols:
+
+                mapped_columns[col] = mapped
+                used_cols.add(mapped)
 
     df = df.rename(columns=mapped_columns)
 
@@ -278,8 +285,10 @@ def standardize_dataframe(df):
         if col not in df.columns:
             df[col] = ""
 
-    return df[final_cols]
+    # FINAL SAFETY
+    df = df.loc[:, ~df.columns.duplicated()]
 
+    return df[final_cols]
 
 # =========================================================
 # CLEAN NUMERIC
@@ -396,20 +405,38 @@ if uploaded_files:
                         start_col:start_col + 8
                     ].copy()
 
+                    # =====================================
+                    # SAFE HEADER EXTRACTION
+                    # =====================================
+                    
                     actual_columns = []
-
+                    
+                    used = {}
+                    
                     for c in range(
                         start_col,
                         start_col + temp_df.shape[1]
                     ):
-
-                        header_value = raw_df.iat[
-                            header_row,
-                            c
-                        ]
-
+                    
+                        header_value = str(
+                            raw_df.iat[header_row, c]
+                        ).strip()
+                    
+                        # Handle duplicate headers
+                        if header_value in used:
+                    
+                            used[header_value] += 1
+                    
+                            header_value = (
+                                f"{header_value}_{used[header_value]}"
+                            )
+                    
+                        else:
+                    
+                            used[header_value] = 0
+                    
                         actual_columns.append(header_value)
-
+                    
                     temp_df.columns = actual_columns
 
                     temp_df = temp_df.ffill()
@@ -492,6 +519,15 @@ if uploaded_files:
 
                     temp_df = temp_df[final_cols]
 
+                    # =====================================
+                    # FINAL COLUMN SAFETY
+                    # =====================================
+                    
+                    temp_df = temp_df.loc[
+                        :,
+                        ~temp_df.columns.duplicated()
+                    ]
+                    
                     all_data.append(temp_df)
 
             except Exception as e:
