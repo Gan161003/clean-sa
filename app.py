@@ -281,8 +281,11 @@ def process_vertical_sheet(
     # DATE
     df["date"] = pd.to_datetime(
         df["date"],
-        errors="coerce"
+        errors="coerce",
+        dayfirst=True
     )
+
+    df["date"] = df["date"].dt.strftime("%d-%m-%Y")
 
     df = df[df["date"].notna()]
 
@@ -568,14 +571,30 @@ def process_horizontal_sheet(
         temp_df = temp_df[required_cols]
 
         # DATE
+        # df["date"] = pd.to_datetime(
+        #     df["date"],
+        #     errors="coerce",
+        #     dayfirst=True
+        # )
+        
+        # df["date"] = df["date"].dt.strftime("%d-%m-%Y")
+
+        # temp_df = temp_df[
+        #     temp_df["date"].notna()
+        # ]
+
+        # DATE
         temp_df["date"] = pd.to_datetime(
             temp_df["date"],
-            errors="coerce"
+            errors="coerce",
+            dayfirst=True
         )
-
+        
         temp_df = temp_df[
             temp_df["date"].notna()
         ]
+        
+        temp_df["date"] = temp_df["date"].dt.strftime("%d-%m-%Y")
 
         if len(temp_df) == 0:
             continue
