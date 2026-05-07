@@ -247,24 +247,24 @@ def find_horizontal_tables(df):
 
 
 
-# REMOVE DUPLICATES
-
-unique_tables = []
-seen = set()
-
-for t in tables:
-
-    key = (
-        t["header_row"],
-        t["start_col"]
-    )
-
-    if key not in seen:
-
-        unique_tables.append(t)
-        seen.add(key)
-
-return unique_tables
+    # REMOVE DUPLICATES
+    
+    unique_tables = []
+    seen = set()
+    
+    for t in tables:
+    
+        key = (
+            t["header_row"],
+            t["start_col"]
+        )
+    
+        if key not in seen:
+    
+            unique_tables.append(t)
+            seen.add(key)
+    
+    return unique_tables
 
 
 # =========================================================
