@@ -28,7 +28,8 @@ COLUMN_MAP = {
 
     "impressions": [
         "impression",
-        "impressions"
+        "impressions",
+        "display"
     ],
 
     "clicks": [
@@ -137,59 +138,6 @@ def clean_numeric(series):
 # FIND TABLES
 # =========================================================
 
-# def find_tables(df):
-
-#     tables = []
-
-#     rows, cols = df.shape
-
-#     for r in range(rows):
-
-#         for c in range(cols):
-
-#             val = clean_string(
-#                 df.iat[r, c]
-#             )
-
-#             if val != "date":
-#                 continue
-
-#             # CHECK NEXT 4 COLS
-#             headers = []
-
-#             for x in range(c, min(c + 5, cols)):
-
-#                 cell = clean_string(
-#                     df.iat[r + 1, x]
-#                 )
-
-#                 headers.append(cell)
-
-#             # MUST HAVE IMPRESSION + CLICKS
-#             has_imp = any(
-#                 "impression" in h
-#                 for h in headers
-#             )
-
-#             has_click = any(
-#                 "click" in h or "tap" in h
-#                 for h in headers
-#             )
-
-#             if has_imp and has_click:
-
-#                 tables.append({
-#                     "header_row": r,
-#                     "start_col": c
-#                 })
-
-#     return tables
-
-
-# =========================================================
-# FIND TABLES
-# =========================================================
-
 def find_tables(df):
 
     tables = []
@@ -211,18 +159,16 @@ def find_tables(df):
             found_imp = False
             found_click = False
 
-            # CHECK NEXT 6 COLS
+            # CHECK NEXT 8 COLS
             for scan_c in range(
                 c,
-                min(c + 6, cols)
+                min(c + 8, cols)
             ):
 
-                # CHECK CURRENT ROW
                 val1 = clean_string(
                     df.iat[r, scan_c]
                 )
 
-                # CHECK NEXT ROW
                 val2 = clean_string(
                     df.iat[r + 1, scan_c]
                 )
@@ -232,7 +178,6 @@ def find_tables(df):
                 )
 
                 if "impression" in combined:
-
                     found_imp = True
 
                 if (
@@ -240,7 +185,6 @@ def find_tables(df):
                     or
                     "tap" in combined
                 ):
-
                     found_click = True
 
             # VALID TABLE
@@ -253,7 +197,10 @@ def find_tables(df):
 
                 })
 
+    # =====================================================
     # REMOVE DUPLICATES
+    # =====================================================
+
     unique_tables = []
 
     seen = set()
@@ -271,7 +218,8 @@ def find_tables(df):
 
             seen.add(key)
 
-    return tables
+    return unique_tables
+
 
 # =========================================================
 # GET TABLE TITLE
@@ -323,7 +271,7 @@ def find_table_end(
 
         row_slice = df.iloc[
             r,
-            start_col:start_col + 6
+            start_col:start_col + 8
         ]
 
         non_blank = row_slice.notna().sum()
@@ -401,6 +349,7 @@ if uploaded_files:
                     header=None
                 )
 
+                # KEEP ORIGINAL STRUCTURE
                 raw_df = raw_df.dropna(
                     how="all"
                 ).reset_index(drop=True)
@@ -414,7 +363,7 @@ if uploaded_files:
                 # LOOP TABLES
                 # =================================================
 
-                for table in tables:
+                for idx_table, table in enumerate(tables):
 
                     header_row = table[
                         "header_row"
@@ -424,49 +373,111 @@ if uploaded_files:
                         "start_col"
                     ]
 
+                    # =============================================
+                    # FIND NEXT TABLE START
+                    # =============================================
+
+                    next_start_col = raw_df.shape[1]
+
+                    future_tables = sorted([
+                        t["start_col"]
+                        for t in tables
+                        if (
+                            t["start_col"] > start_col
+                            and
+                            t["header_row"] == header_row
+                        )
+                    ])
+
+                    if len(future_tables) > 0:
+
+                        next_start_col = future_tables[0]
+
                     end_row = find_table_end(
                         raw_df,
                         header_row,
                         start_col
                     )
 
-                    # =================================================
-                    # EXTRACT DATA
-                    # =================================================
+                    # =============================================
+                    # EXTRACT ONLY CURRENT TABLE
+                    # =============================================
 
                     temp_df = raw_df.iloc[
                         header_row + 2:end_row + 1,
-                        start_col:start_col + 6
+                        start_col:next_start_col
                     ].copy()
 
-                    # =================================================
-                    # HEADERS
-                    # =================================================
+                    # REMOVE EMPTY COLUMNS
+                    temp_df = temp_df.dropna(
+                        axis=1,
+                        how="all"
+                    )
+
+                    if temp_df.empty:
+                        continue
+
+                    # =============================================
+                    # BUILD HEADERS
+                    # =============================================
 
                     actual_headers = []
 
-                    for c in range(
-                        start_col,
-                        start_col + 5
-                    ):
+                    for c in temp_df.columns:
 
-                        val = raw_df.iat[
-                            header_row + 1,
-                            c
-                        ]
-
-                        actual_headers.append(
-                            str(val).strip()
+                        top_header = clean_string(
+                            raw_df.iat[
+                                header_row,
+                                c
+                            ]
                         )
 
-                    # FIRST COL ALWAYS DATE
-                    actual_headers[0] = "date"
+                        second_header = clean_string(
+                            raw_df.iat[
+                                header_row + 1,
+                                c
+                            ]
+                        )
+
+                        # FIRST COLUMN ALWAYS DATE
+                        if c == start_col:
+
+                            header_value = "date"
+
+                        else:
+
+                            if second_header != "":
+                                header_value = second_header
+                            else:
+                                header_value = top_header
+
+                        actual_headers.append(
+                            header_value
+                        )
+
+                    # =============================================
+                    # MATCH LENGTH SAFELY
+                    # =============================================
+
+                    min_len = min(
+                        len(actual_headers),
+                        len(temp_df.columns)
+                    )
+
+                    temp_df = temp_df.iloc[
+                        :,
+                        :min_len
+                    ]
+
+                    actual_headers = actual_headers[
+                        :min_len
+                    ]
 
                     temp_df.columns = actual_headers
 
-                    # =================================================
+                    # =============================================
                     # REMOVE TOTAL ROWS
-                    # =================================================
+                    # =============================================
 
                     temp_df = temp_df[
                         ~temp_df.apply(
@@ -475,26 +486,35 @@ if uploaded_files:
                         )
                     ]
 
-                    # =================================================
+                    # =============================================
                     # STANDARDIZE
-                    # =================================================
+                    # =============================================
 
                     mapped_columns = {}
+
+                    used = set()
 
                     for col in temp_df.columns:
 
                         mapped = map_column(col)
 
-                        if mapped:
+                        if (
+                            mapped
+                            and
+                            mapped not in used
+                        ):
+
                             mapped_columns[col] = mapped
+
+                            used.add(mapped)
 
                     temp_df = temp_df.rename(
                         columns=mapped_columns
                     )
 
-                    # =================================================
+                    # =============================================
                     # REQUIRED COLS
-                    # =================================================
+                    # =============================================
 
                     required_cols = [
                         "date",
@@ -514,18 +534,24 @@ if uploaded_files:
                         required_cols
                     ]
 
-                    # =================================================
-                    # REMOVE EMPTY DATE
-                    # =================================================
+                    # =============================================
+                    # REMOVE EMPTY DATES
+                    # =============================================
 
                     temp_df = temp_df[
-                        temp_df["date"]
-                        .notna()
+                        temp_df["date"].notna()
                     ]
 
-                    # =================================================
+                    # REMOVE BLANK STRINGS
+                    temp_df = temp_df[
+                        temp_df["date"]
+                        .astype(str)
+                        .str.strip() != ""
+                    ]
+
+                    # =============================================
                     # DATE PARSE
-                    # =================================================
+                    # =============================================
 
                     temp_df["date"] = pd.to_datetime(
                         temp_df["date"],
@@ -539,9 +565,9 @@ if uploaded_files:
                     if len(temp_df) == 0:
                         continue
 
-                    # =================================================
+                    # =============================================
                     # CLEAN NUMBERS
-                    # =================================================
+                    # =============================================
 
                     numeric_cols = [
                         "impressions",
@@ -557,9 +583,9 @@ if uploaded_files:
                             temp_df[col]
                         )
 
-                    # =================================================
-                    # TITLE
-                    # =================================================
+                    # =============================================
+                    # TABLE TITLE
+                    # =============================================
 
                     table_title = get_table_title(
                         raw_df,
@@ -567,9 +593,9 @@ if uploaded_files:
                         start_col
                     )
 
-                    # =================================================
+                    # =============================================
                     # EXTRA COLS
-                    # =================================================
+                    # =============================================
 
                     temp_df["creative"] = (
                         table_title
@@ -587,9 +613,9 @@ if uploaded_files:
                         sheet_name
                     )
 
-                    # =================================================
+                    # =============================================
                     # FINAL ORDER
-                    # =================================================
+                    # =============================================
 
                     final_cols = [
 
@@ -609,7 +635,15 @@ if uploaded_files:
                         final_cols
                     ]
 
+                    # =============================================
+                    # REMOVE DUPLICATES
+                    # =============================================
+
                     temp_df = temp_df.drop_duplicates()
+
+                    # SKIP EMPTY
+                    if len(temp_df) == 0:
+                        continue
 
                     all_data.append(temp_df)
 
@@ -653,7 +687,7 @@ if uploaded_files:
         )
 
         # =================================================
-        # DOWNLOAD
+        # DOWNLOAD EXCEL
         # =================================================
 
         output = BytesIO()
