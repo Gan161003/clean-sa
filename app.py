@@ -299,11 +299,11 @@ def clean_numeric(df):
 
 
        df[col] = (
-        safe_series(df, col)
-        .str.replace(",", "", regex=False)
-        .str.replace("%", "", regex=False)
-        .str.strip()
-    )
+            safe_series(df, col)
+            .str.replace(",", "", regex=False)
+            .str.replace("%", "", regex=False)
+            .str.strip()
+        )
 
         df[col] = df[col].replace("", np.nan)
 
