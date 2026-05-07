@@ -410,86 +410,53 @@ if uploaded_files:
                         continue
 
                     # =================================================
+                    # ============================================
                     # MULTI HEADER EXTRACTION
-                    # =================================================
-
+                    # ============================================
+                    
                     actual_columns = []
-
+                    
                     used_headers = {}
                     
-                    for idx_col, c in enumerate(
+                    for idx_col in range(len(temp_df.columns)):
                     
-                        range(
-                            start_col,
-                            start_col + TABLE_WIDTH
-                        )
+                        c = temp_df.columns[idx_col]
                     
-                    ):
-
                         top_header = clean_string(
-                            raw_df.iat[
-                                header_row,
-                                c
-                            ]
+                            raw_df.iat[header_row, c]
                         )
-
+                    
                         second_header = clean_string(
-                            raw_df.iat[
-                                header_row + 1,
-                                c
-                            ]
+                            raw_df.iat[header_row + 1, c]
                         )
-
-                        # IMPORTANT
-                        # USE SECOND HEADER
-                        # FOR METRICS
-
+                    
+                        # USE SECOND HEADER IF EXISTS
                         if second_header != "":
-
-                            header_value = (
-                                second_header
-                            )
-
+                            header_value = second_header
                         else:
-
-                            header_value = (
-                                top_header
-                            )
-
+                            header_value = top_header
+                    
                         if header_value == "":
-
-                            header_value = (
-                                f"unknown_{idx_col}"
-                            )
-
-                        if (
-                            header_value
-                            in used_headers
-                        ):
-
-                            used_headers[
-                                header_value
-                            ] += 1
-
+                            header_value = f"unknown_{idx_col}"
+                    
+                        # HANDLE DUPLICATES
+                        if header_value in used_headers:
+                    
+                            used_headers[header_value] += 1
+                    
                             header_value = (
                                 f"{header_value}_"
                                 f"{used_headers[header_value]}"
                             )
-
+                    
                         else:
-
-                            used_headers[
-                                header_value
-                            ] = 0
-
-                        actual_columns.append(
-                            header_value
-                        )
-
-                    temp_df.columns = (
-                        actual_columns
-                    )
-
+                    
+                            used_headers[header_value] = 0
+                    
+                        actual_columns.append(header_value)
+                    
+                    # APPLY HEADERS
+                    temp_df.columns = actual_columns
                     # =================================================
                     # REMOVE TOTAL ROWS
                     # =================================================
