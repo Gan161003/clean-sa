@@ -297,13 +297,13 @@ def clean_numeric(df):
 
     for col in numeric_cols:
 
-        df[col] = (
-            df[col]
-            .astype(str)
-            .str.replace(",", "", regex=False)
-            .str.replace("%", "", regex=False)
-            .str.strip()
-        )
+
+       df[col] = (
+        safe_series(df, col)
+        .str.replace(",", "", regex=False)
+        .str.replace("%", "", regex=False)
+        .str.strip()
+    )
 
         df[col] = df[col].replace("", np.nan)
 
@@ -358,9 +358,9 @@ if uploaded_files:
                     sheet_name=sheet_name,
                     header=None
                 )
-                df = df.ffill()
+                raw_df = df.ffill()
 
-                df = df.loc[:, ~df.columns.duplicated()]
+                raw_df = df.loc[:, ~df.columns.duplicated()]
 
                 raw_df = raw_df.dropna(
                     how="all"
@@ -442,8 +442,7 @@ if uploaded_files:
                     # =============================================
 
                     temp_df = temp_df[
-                        temp_df["date"]
-                        .astype(str)
+                        safe_series(temp_df, "date")
                         .str.strip() != ""
                     ]
 
