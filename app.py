@@ -220,6 +220,82 @@ def find_horizontal_tables(df):
 
                 })
 
+    # =========================================
+    # REMOVE DUPLICATES
+    # =========================================
+
+    unique_tables = []
+    seen = set()
+
+    for t in tables:
+
+        key = (
+            t["header_row"],
+            t["start_col"]
+        )
+
+        if key not in seen:
+
+            unique_tables.append(t)
+            seen.add(key)
+
+    return unique_tables
+
+# def find_horizontal_tables(df):
+
+#     tables = []
+
+#     rows, cols = df.shape
+
+#     for r in range(rows - 1):
+
+#         for c in range(cols):
+
+#             current = clean_string(
+#                 df.iat[r, c]
+#             )
+
+#             if current != "date":
+#                 continue
+
+#             found_imp = False
+#             found_click = False
+
+#             for scan_c in range(
+#                 c,
+#                 min(c + 8, cols)
+#             ):
+
+#                 val1 = clean_string(
+#                     df.iat[r, scan_c]
+#                 )
+
+#                 val2 = clean_string(
+#                     df.iat[r + 1, scan_c]
+#                 )
+
+#                 combined = val1 + " " + val2
+
+#                 if "impression" in combined:
+#                     found_imp = True
+
+#                 if (
+#                     "click" in combined
+#                     or
+#                     "tap" in combined
+#                 ):
+#                     found_click = True
+
+#             if found_imp and found_click:
+
+#                 tables.append({
+
+#                     "header_row": r,
+#                     "start_col": c,
+#                     "type": "horizontal"
+
+#                 })
+
     # REMOVE DUPLICATES
 
     # unique_tables = []
@@ -577,7 +653,13 @@ if uploaded_files:
                         ]
 
                         temp_df.columns = actual_headers
-                        temp_df = temp_df.ffill()
+                        # ONLY FILL DATE COLUMN
+                        first_col = temp_df.columns[0]
+                        
+                        temp_df[first_col] = (
+                            temp_df[first_col]
+                            .ffill()
+                        )
 
                     # =============================================
                     # NORMAL TABLE
