@@ -254,6 +254,7 @@ if uploaded_files:
                     sheet_name=sheet_name,
                     header=header_row
                 )
+                df = df.ffill()
 
                 df = df.dropna(how="all")
 
