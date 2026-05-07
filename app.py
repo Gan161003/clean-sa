@@ -101,6 +101,20 @@ def extract_unique_key(filename):
 
     return ""
 
+# =====================================
+# SAFE SERIES HANDLER
+# =====================================
+
+def safe_series(df, col):
+
+    data = df[col]
+
+    # If duplicate column names return DataFrame
+    if isinstance(data, pd.DataFrame):
+        data = data.iloc[:, 0]
+
+    return data.astype(str)
+
 
 def map_column(col_name):
 
@@ -344,6 +358,9 @@ if uploaded_files:
                     sheet_name=sheet_name,
                     header=None
                 )
+                df = df.ffill()
+
+                df = df.loc[:, ~df.columns.duplicated()]
 
                 raw_df = raw_df.dropna(
                     how="all"
