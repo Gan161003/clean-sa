@@ -60,6 +60,17 @@ COLUMN_MAP = {
     ]
 }
 
+# =========================================================
+# TABLE DETECTION CONFIG
+# =========================================================
+
+IGNORE_WORDS = [
+    "total",
+    "grand total",
+    "summary"
+]
+
+MIN_HEADER_MATCH = 2
 
 # =========================================================
 # HELPERS
@@ -123,35 +134,108 @@ def is_total_row(row):
     return False
 
 
-def find_header_row(df):
+# =========================================================
+# FIND ALL TABLES
+# =========================================================
 
-    best_row = None
-    best_score = 0
+def find_all_tables(df):
 
-    for i in range(min(20, len(df))):
+    tables = []
 
-        row = df.iloc[i].tolist()
+    rows, cols = df.shape
 
-        score = 0
+    for r in range(rows):
 
-        for cell in row:
+        for c in range(cols):
 
-            cell_clean = clean_string(cell)
+            matched_headers = {}
 
-            for aliases in COLUMN_MAP.values():
+            for scan_c in range(c, min(c + 8, cols)):
 
-                for alias in aliases:
+                cell = clean_string(df.iat[r, scan_c])
 
-                    if alias in cell_clean:
-                        score += 1
+                mapped = map_column(cell)
 
-        if score > best_score:
+                if mapped:
+                    matched_headers[mapped] = scan_c
 
-            best_score = score
-            best_row = i
+            if len(matched_headers) >= MIN_HEADER_MATCH:
 
-    return best_row
+                tables.append({
+                    "header_row": r,
+                    "start_col": c,
+                    "headers": matched_headers
+                })
 
+    # remove duplicates
+
+    unique_tables = []
+    seen = set()
+
+    for t in tables:
+
+        key = (t["header_row"], t["start_col"])
+
+        if key not in seen:
+
+            unique_tables.append(t)
+            seen.add(key)
+
+    return unique_tables
+
+
+# =========================================================
+# FIND TABLE END
+# =========================================================
+
+def find_table_end(df, start_row, start_col):
+
+    blank_count = 0
+
+    for r in range(start_row + 1, len(df)):
+
+        row_data = df.iloc[r, start_col:start_col + 8]
+
+        non_blank = row_data.notna().sum()
+
+        if non_blank == 0:
+            blank_count += 1
+        else:
+            blank_count = 0
+
+        if blank_count >= 2:
+            return r - 2
+
+    return len(df) - 1
+
+
+# =========================================================
+# GET TABLE TITLE
+# =========================================================
+
+def get_table_title(df, header_row, start_col):
+
+    check_rows = [
+        header_row - 1,
+        header_row - 2,
+        header_row - 3
+    ]
+
+    for r in check_rows:
+
+        if r < 0:
+            continue
+
+        val = clean_string(df.iat[r, start_col])
+
+        if val != "" and "date" not in val:
+            return str(df.iat[r, start_col]).strip()
+
+    return ""
+
+# =========================================================
+# STANDARDIZE DATAFRAME
+# =========================================================
 
 def standardize_dataframe(df):
 
@@ -183,6 +267,10 @@ def standardize_dataframe(df):
     return df[final_cols]
 
 
+# =========================================================
+# CLEAN NUMERIC
+# =========================================================
+
 def clean_numeric(df):
 
     numeric_cols = [
@@ -202,6 +290,8 @@ def clean_numeric(df):
             .str.replace("%", "", regex=False)
             .str.strip()
         )
+
+        df[col] = df[col].replace("", np.nan)
 
     return df
 
@@ -228,11 +318,22 @@ if uploaded_files:
 
     for idx, uploaded_file in enumerate(uploaded_files):
 
-        st.write(f"Processing: {uploaded_file.name}")
+        st.write(f"📂 Processing: {uploaded_file.name}")
 
         unique_key = extract_unique_key(uploaded_file.name)
 
-        excel_file = pd.ExcelFile(uploaded_file)
+        try:
+
+            excel_file = pd.ExcelFile(uploaded_file)
+
+        except Exception as e:
+
+            st.error(f"Cannot open file: {uploaded_file.name}")
+            continue
+
+        # =====================================================
+        # LOOP SHEETS
+        # =====================================================
 
         for sheet_name in excel_file.sheet_names:
 
@@ -244,62 +345,148 @@ if uploaded_files:
                     header=None
                 )
 
-                header_row = find_header_row(raw_df)
+                raw_df = raw_df.dropna(
+                    how="all"
+                ).reset_index(drop=True)
 
-                if header_row is None:
+                tables = find_all_tables(raw_df)
+
+                if len(tables) == 0:
+
+                    st.warning(
+                        f"No valid table found in: {sheet_name}"
+                    )
+
                     continue
 
-                df = pd.read_excel(
-                    uploaded_file,
-                    sheet_name=sheet_name,
-                    header=header_row
-                )
-                df = df.ffill()
+                # =================================================
+                # LOOP TABLES
+                # =================================================
 
-                df = df.dropna(how="all")
+                for table in tables:
 
-                mask = df.apply(
-                    lambda row: is_total_row(row),
-                    axis=1
-                )
+                    header_row = table["header_row"]
+                    start_col = table["start_col"]
 
-                df = df[~mask]
+                    end_row = find_table_end(
+                        raw_df,
+                        header_row,
+                        start_col
+                    )
 
-                df = standardize_dataframe(df)
+                    temp_df = raw_df.iloc[
+                        header_row + 1:end_row + 1,
+                        start_col:start_col + 8
+                    ].copy()
 
-                df = clean_numeric(df)
+                    actual_columns = []
 
-                df = df[
-                    df["date"].astype(str).str.strip() != ""
-                ]
+                    for c in range(
+                        start_col,
+                        start_col + temp_df.shape[1]
+                    ):
 
-                df["unique_key"] = unique_key
-                df["source_file"] = uploaded_file.name
-                df["sheet_name"] = sheet_name
+                        header_value = raw_df.iat[
+                            header_row,
+                            c
+                        ]
 
-                final_cols = [
-                    "unique_key",
-                    "date",
-                    "impressions",
-                    "clicks",
-                    "views",
-                    "spends",
-                    "engagements",
-                    "source_file",
-                    "sheet_name"
-                ]
+                        actual_columns.append(header_value)
 
-                df = df[final_cols]
+                    temp_df.columns = actual_columns
 
-                all_data.append(df)
+                    temp_df = temp_df.ffill()
+
+                    temp_df = temp_df.dropna(
+                        how="all"
+                    )
+
+                    # =============================================
+                    # REMOVE TOTAL ROWS
+                    # =============================================
+
+                    mask = temp_df.apply(
+                        lambda row: is_total_row(row),
+                        axis=1
+                    )
+
+                    temp_df = temp_df[~mask]
+
+                    # =============================================
+                    # STANDARDIZE
+                    # =============================================
+
+                    temp_df = standardize_dataframe(temp_df)
+
+                    temp_df = clean_numeric(temp_df)
+
+                    # =============================================
+                    # REMOVE EMPTY DATES
+                    # =============================================
+
+                    temp_df = temp_df[
+                        temp_df["date"]
+                        .astype(str)
+                        .str.strip() != ""
+                    ]
+
+                    # =============================================
+                    # SKIP EMPTY TABLE
+                    # =============================================
+
+                    if len(temp_df) == 0:
+                        continue
+
+                    # =============================================
+                    # TABLE TITLE
+                    # =============================================
+
+                    table_title = get_table_title(
+                        raw_df,
+                        header_row,
+                        start_col
+                    )
+
+                    temp_df["creative"] = table_title
+
+                    # =============================================
+                    # EXTRA COLUMNS
+                    # =============================================
+
+                    temp_df["unique_key"] = unique_key
+                    temp_df["source_file"] = uploaded_file.name
+                    temp_df["sheet_name"] = sheet_name
+
+                    # =============================================
+                    # FINAL COLUMN ORDER
+                    # =============================================
+
+                    final_cols = [
+                        "unique_key",
+                        "creative",
+                        "date",
+                        "impressions",
+                        "clicks",
+                        "views",
+                        "spends",
+                        "engagements",
+                        "source_file",
+                        "sheet_name"
+                    ]
+
+                    temp_df = temp_df[final_cols]
+
+                    all_data.append(temp_df)
 
             except Exception as e:
 
                 st.warning(
-                    f"Sheet Error: {sheet_name} | {str(e)}"
+                    f"❌ Sheet Error: {sheet_name} | {str(e)}"
                 )
 
-        progress.progress((idx + 1) / len(uploaded_files))
+        progress.progress(
+            (idx + 1) / len(uploaded_files)
+        )
 
     # =====================================================
     # FINAL OUTPUT
@@ -307,15 +494,31 @@ if uploaded_files:
 
     if len(all_data) > 0:
 
-        final_df = pd.concat(all_data, ignore_index=True)
+        final_df = pd.concat(
+            all_data,
+            ignore_index=True
+        )
 
-        st.success("Processing Completed")
+        final_df = final_df.drop_duplicates()
+
+        st.success("✅ Processing Completed")
+
+        st.write(
+            f"Total Rows Extracted: {len(final_df)}"
+        )
 
         st.dataframe(final_df)
 
+        # =================================================
+        # DOWNLOAD EXCEL
+        # =================================================
+
         output = BytesIO()
 
-        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        with pd.ExcelWriter(
+            output,
+            engine="openpyxl"
+        ) as writer:
 
             final_df.to_excel(
                 writer,
@@ -332,4 +535,4 @@ if uploaded_files:
 
     else:
 
-        st.error("No Data Extracted")
+        st.error("❌ No Data Extracted")
