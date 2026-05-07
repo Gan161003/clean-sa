@@ -130,6 +130,7 @@ def is_total_row(row):
 # =========================================================
 # FIND ALL TABLES
 # =========================================================
+
 def find_all_tables(df):
 
     tables = []
@@ -171,13 +172,10 @@ def find_all_tables(df):
 
                 tables.append({
                     "header_row": r,
-                    "start_col": c,
-                    "headers": matched_headers
+                    "start_col": c
                 })
 
-    # =========================================
     # REMOVE OVERLAPPING TABLES
-    # =========================================
 
     final_tables = []
 
@@ -195,7 +193,6 @@ def find_all_tables(df):
 
         final_tables.append(t)
 
-        # BLOCK NEARBY COLUMNS
         for i in range(
             t["start_col"],
             t["start_col"] + 5
@@ -206,6 +203,7 @@ def find_all_tables(df):
             )
 
     return final_tables
+
 
 # =========================================================
 # FIND TABLE END
@@ -357,8 +355,11 @@ if uploaded_files:
                     header=None
                 )
 
-                # FIX MERGED CELLS
-                raw_df = raw_df.ffill()
+                # =========================================
+                # FIX HORIZONTAL MERGED CELLS
+                # =========================================
+
+                raw_df = raw_df.ffill(axis=1)
 
                 raw_df = raw_df.dropna(
                     how="all"
@@ -375,7 +376,7 @@ if uploaded_files:
                 # LOOP TABLES
                 # =================================================
 
-                for i, table in enumerate(tables):
+                for table in tables:
 
                     header_row = table[
                         "header_row"
@@ -384,8 +385,6 @@ if uploaded_files:
                     start_col = table[
                         "start_col"
                     ]
-
-
 
                     end_row = find_table_end(
                         raw_df,
@@ -396,13 +395,8 @@ if uploaded_files:
                     # EXTRACT TABLE
                     # =================================================
 
-                    # temp_df = raw_df.iloc[
-                    #     header_row + 2:end_row + 1,
-                    #     start_col:next_table_col
-                    # ].copy()
-
                     TABLE_WIDTH = 5
-                    
+
                     temp_df = raw_df.iloc[
                         header_row + 2:end_row + 1,
                         start_col:start_col + TABLE_WIDTH
@@ -417,53 +411,68 @@ if uploaded_files:
                         continue
 
                     # =================================================
-                    # ============================================
                     # MULTI HEADER EXTRACTION
-                    # ============================================
-                    
+                    # =================================================
+
                     actual_columns = []
-                    
+
                     used_headers = {}
-                    
-                    for idx_col in range(len(temp_df.columns)):
-                    
+
+                    for idx_col in range(
+                        len(temp_df.columns)
+                    ):
+
                         c = temp_df.columns[idx_col]
-                    
+
                         top_header = clean_string(
-                            raw_df.iat[header_row, c]
+                            raw_df.iat[
+                                header_row,
+                                c
+                            ]
                         )
-                    
+
                         second_header = clean_string(
-                            raw_df.iat[header_row + 1, c]
+                            raw_df.iat[
+                                header_row + 1,
+                                c
+                            ]
                         )
-                    
-                        # USE SECOND HEADER IF EXISTS
+
+                        # USE SECOND HEADER
                         if second_header != "":
                             header_value = second_header
                         else:
                             header_value = top_header
-                    
+
                         if header_value == "":
-                            header_value = f"unknown_{idx_col}"
-                    
+                            header_value = (
+                                f"unknown_{idx_col}"
+                            )
+
                         # HANDLE DUPLICATES
                         if header_value in used_headers:
-                    
-                            used_headers[header_value] += 1
-                    
+
+                            used_headers[
+                                header_value
+                            ] += 1
+
                             header_value = (
                                 f"{header_value}_"
                                 f"{used_headers[header_value]}"
                             )
-                    
+
                         else:
-                    
-                            used_headers[header_value] = 0
-                    
-                        actual_columns.append(header_value)
-                    
-                    # APPLY HEADERS
+
+                            used_headers[
+                                header_value
+                            ] = 0
+
+                        actual_columns.append(
+                            header_value
+                        )
+
                     temp_df.columns = actual_columns
+
                     # =================================================
                     # REMOVE TOTAL ROWS
                     # =================================================
@@ -535,6 +544,26 @@ if uploaded_files:
                         .astype(str)
                         .str.strip() != ""
                     ]
+
+                    # =================================================
+                    # REMOVE INVALID DATES
+                    # =================================================
+
+                    temp_df["parsed_date"] = pd.to_datetime(
+                        temp_df["date"],
+                        errors="coerce"
+                    )
+
+                    temp_df = temp_df[
+                        temp_df["parsed_date"].notna()
+                    ]
+
+                    temp_df = temp_df.drop(
+                        columns=["parsed_date"]
+                    )
+
+                    if len(temp_df) == 0:
+                        continue
 
                     # =================================================
                     # CLEAN NUMERIC
@@ -683,3 +712,4 @@ if uploaded_files:
     else:
 
         st.error("❌ No Data Extracted")
+
