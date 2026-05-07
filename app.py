@@ -137,53 +137,55 @@ def clean_numeric(series):
 # FIND TABLES
 # =========================================================
 
-def find_tables(df):
+# def find_tables(df):
 
-    tables = []
+#     tables = []
 
-    rows, cols = df.shape
+#     rows, cols = df.shape
 
-    for r in range(rows):
+#     for r in range(rows):
 
-        for c in range(cols):
+#         for c in range(cols):
 
-            val = clean_string(
-                df.iat[r, c]
-            )
+#             val = clean_string(
+#                 df.iat[r, c]
+#             )
 
-            if val != "date":
-                continue
+#             if val != "date":
+#                 continue
 
-            # CHECK NEXT 4 COLS
-            headers = []
+#             # CHECK NEXT 4 COLS
+#             headers = []
 
-            for x in range(c, min(c + 5, cols)):
+#             for x in range(c, min(c + 5, cols)):
 
-                cell = clean_string(
-                    df.iat[r + 1, x]
-                )
+#                 cell = clean_string(
+#                     df.iat[r + 1, x]
+#                 )
 
-                headers.append(cell)
+#                 headers.append(cell)
 
-            # MUST HAVE IMPRESSION + CLICKS
-            has_imp = any(
-                "impression" in h
-                for h in headers
-            )
+#             # MUST HAVE IMPRESSION + CLICKS
+#             has_imp = any(
+#                 "impression" in h
+#                 for h in headers
+#             )
 
-            has_click = any(
-                "click" in h or "tap" in h
-                for h in headers
-            )
+#             has_click = any(
+#                 "click" in h or "tap" in h
+#                 for h in headers
+#             )
 
-            if has_imp and has_click:
+#             if has_imp and has_click:
 
-                tables.append({
-                    "header_row": r,
-                    "start_col": c
-                })
+#                 tables.append({
+#                     "header_row": r,
+#                     "start_col": c
+#                 })
 
-    return tables
+#     return tables
+
+
 
 
 # =========================================================
@@ -236,7 +238,7 @@ def find_table_end(
 
         row_slice = df.iloc[
             r,
-            start_col:start_col + 5
+            start_col:start_col + 6
         ]
 
         non_blank = row_slice.notna().sum()
@@ -349,7 +351,7 @@ if uploaded_files:
 
                     temp_df = raw_df.iloc[
                         header_row + 2:end_row + 1,
-                        start_col:start_col + 5
+                        start_col:start_col + 6
                     ].copy()
 
                     # =================================================
