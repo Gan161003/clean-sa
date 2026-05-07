@@ -222,28 +222,49 @@ def find_horizontal_tables(df):
 
     # REMOVE DUPLICATES
 
-    unique_tables = []
+    # unique_tables = []
 
-    seen_cols = set()
+    # seen_cols = set()
 
-    for t in sorted(
-        tables,
-        key=lambda x: x["start_col"]
-    ):
+    # for t in sorted(
+    #     tables,
+    #     key=lambda x: x["start_col"]
+    # ):
 
-        sc = t["start_col"]
+    #     sc = t["start_col"]
 
-        if any(
-            abs(sc - s) <= 1
-            for s in seen_cols
-        ):
-            continue
+    #     if any(
+    #         abs(sc - s) <= 1
+    #         for s in seen_cols
+    #     ):
+    #         continue
+
+    #     unique_tables.append(t)
+
+    #     seen_cols.add(sc)
+
+    # return unique_tables
+
+
+
+# REMOVE DUPLICATES
+
+unique_tables = []
+seen = set()
+
+for t in tables:
+
+    key = (
+        t["header_row"],
+        t["start_col"]
+    )
+
+    if key not in seen:
 
         unique_tables.append(t)
+        seen.add(key)
 
-        seen_cols.add(sc)
-
-    return unique_tables
+return unique_tables
 
 
 # =========================================================
@@ -556,6 +577,7 @@ if uploaded_files:
                         ]
 
                         temp_df.columns = actual_headers
+                        temp_df = temp_df.ffill()
 
                     # =============================================
                     # NORMAL TABLE
