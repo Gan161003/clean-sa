@@ -224,7 +224,7 @@ def find_all_tables(df):
 
             matched_headers = {}
 
-            for scan_c in range(c, min(c + 8, cols)):
+            for scan_c in range(c, min(c + 4, cols)):
 
                 cell = clean_string(df.iat[r, scan_c])
 
@@ -268,7 +268,7 @@ def find_table_end(df, start_row, start_col):
 
     for r in range(start_row + 1, len(df)):
 
-        row_data = df.iloc[r, start_col:start_col + 8]
+        row_data = df.iloc[r, start_col:start_col + 4]
 
         non_blank = row_data.notna().sum()
 
@@ -481,7 +481,7 @@ if uploaded_files:
 
                     temp_df = raw_df.iloc[
                         header_row + 1:end_row + 1,
-                        start_col:start_col + 8
+                        start_col:start_col + 4
                     ].copy()
 
                     # =====================================
