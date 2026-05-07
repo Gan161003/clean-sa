@@ -297,8 +297,7 @@ def clean_numeric(df):
 
     for col in numeric_cols:
 
-
-       df[col] = (
+        df[col] = (
             safe_series(df, col)
             .str.replace(",", "", regex=False)
             .str.replace("%", "", regex=False)
@@ -308,7 +307,6 @@ def clean_numeric(df):
         df[col] = df[col].replace("", np.nan)
 
     return df
-
 
 # =========================================================
 # FILE UPLOADER
@@ -358,9 +356,11 @@ if uploaded_files:
                     sheet_name=sheet_name,
                     header=None
                 )
-                raw_df = df.ffill()
-
-                raw_df = df.loc[:, ~df.columns.duplicated()]
+                # Fix merged cells
+                raw_df = raw_df.ffill()
+                
+                # Remove duplicate columns
+                raw_df = raw_df.loc[:, ~raw_df.columns.duplicated()]
 
                 raw_df = raw_df.dropna(
                     how="all"
