@@ -378,34 +378,7 @@ if uploaded_files:
                         "start_col"
                     ]
 
-                    # =================================================
-                    # NEXT TABLE START
-                    # =================================================
 
-                    future_tables = sorted([
-
-                        t["start_col"]
-
-                        for t in tables
-
-                        if (
-                            t["start_col"]
-                            > start_col
-                        )
-
-                    ])
-
-                    if len(future_tables) > 0:
-
-                        next_table_col = (
-                            future_tables[0]
-                        )
-
-                    else:
-
-                        next_table_col = (
-                            raw_df.shape[1]
-                        )
 
                     end_row = find_table_end(
                         raw_df,
@@ -416,9 +389,16 @@ if uploaded_files:
                     # EXTRACT TABLE
                     # =================================================
 
+                    # temp_df = raw_df.iloc[
+                    #     header_row + 2:end_row + 1,
+                    #     start_col:next_table_col
+                    # ].copy()
+
+                    TABLE_WIDTH = 5
+                    
                     temp_df = raw_df.iloc[
                         header_row + 2:end_row + 1,
-                        start_col:next_table_col
+                        start_col:start_col + TABLE_WIDTH
                     ].copy()
 
                     temp_df = temp_df.dropna(
@@ -436,15 +416,14 @@ if uploaded_files:
                     actual_columns = []
 
                     used_headers = {}
-
+                    
                     for idx_col, c in enumerate(
-
+                    
                         range(
                             start_col,
-                            start_col
-                            + temp_df.shape[1]
+                            start_col + TABLE_WIDTH
                         )
-
+                    
                     ):
 
                         top_header = clean_string(
