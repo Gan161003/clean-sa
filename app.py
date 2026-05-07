@@ -461,16 +461,16 @@ if uploaded_files:
                     # SKIP OVERLAPPING HORIZONTAL TABLES
                     # ============================================
                     
-                    skip_table = False
+                    # skip_table = False
                     
-                    for s, e in processed_ranges:
+                    # for s, e in processed_ranges:
                     
-                        if start_col >= s and start_col <= e:
-                            skip_table = True
-                            break
+                    #     if start_col >= s and start_col <= e:
+                    #         skip_table = True
+                    #         break
                     
-                    if skip_table:
-                        continue
+                    # if skip_table:
+                    #     continue
 
                     end_row = find_table_end(
                         raw_df,
@@ -478,10 +478,10 @@ if uploaded_files:
                         start_col
                     )
 
-                    temp_df = raw_df.iloc[
-                        header_row + 1:end_row + 1,
-                        start_col:start_col + 8
-                    ].copy()
+                    # temp_df = raw_df.iloc[
+                    #     header_row + 1:end_row + 1,
+                    #     start_col:start_col + 8
+                    # ].copy()
 
                     # =====================================
                     # SAFE HEADER EXTRACTION
@@ -491,10 +491,14 @@ if uploaded_files:
                     
                     used = {}
                     
+                    # for c in range(
+                    #     start_col,
+                    #     start_col + temp_df.shape[1]
+                    # ):
                     for c in range(
-                        start_col,
-                        start_col + temp_df.shape[1]
-                    ):
+                            start_col,
+                            start_col + len(temp_df.columns)
+                        ):
                     
                         header_value = str(
                             raw_df.iat[header_row, c]
@@ -623,12 +627,12 @@ if uploaded_files:
                     # REGISTER RANGE
                     # =====================================
                     
-                    processed_ranges.append(
-                        (
-                            start_col,
-                            start_col + temp_df.shape[1]
-                        )
-                    )
+                    # processed_ranges.append(
+                    #     (
+                    #         start_col,
+                    #         start_col + temp_df.shape[1]
+                    #     )
+                    # )
                     
                     all_data.append(temp_df)
 
