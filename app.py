@@ -483,7 +483,7 @@ if uploaded_files:
                     # ============================================
 
                     temp_df = raw_df.iloc[
-                        header_row + 1:end_row + 1,
+                        header_row + 2:end_row + 1,
                         start_col:next_table_col
                     ].copy()
 
@@ -500,48 +500,57 @@ if uploaded_files:
                     # HEADERS
                     # ============================================
 
+
+                    # ============================================
+                    # MULTI HEADER EXTRACTION
+                    # ============================================
+                    
                     actual_columns = []
-
+                    
                     used_headers = {}
-
+                    
                     for idx_col, c in enumerate(
                         range(
                             start_col,
                             start_col + temp_df.shape[1]
                         )
                     ):
-
-                        header_value = str(
+                    
+                        top_header = clean_string(
                             raw_df.iat[header_row, c]
-                        ).strip()
-
-                        if (
-                            header_value == ""
-                            or header_value.lower() == "nan"
-                        ):
-                            header_value = (
-                                f"unknown_{idx_col}"
-                            )
-
-                        # HANDLE DUPLICATE HEADERS
-
+                        )
+                    
+                        second_header = clean_string(
+                            raw_df.iat[header_row + 1, c]
+                        )
+                    
+                        # USE SECOND HEADER IF EXISTS
+                        if second_header != "":
+                            header_value = second_header
+                    
+                        else:
+                            header_value = top_header
+                    
+                        if header_value == "":
+                            header_value = f"unknown_{idx_col}"
+                    
+                        # HANDLE DUPLICATES
                         if header_value in used_headers:
-
+                    
                             used_headers[header_value] += 1
-
+                    
                             header_value = (
                                 f"{header_value}_"
                                 f"{used_headers[header_value]}"
                             )
-
+                    
                         else:
-
+                    
                             used_headers[header_value] = 0
-
-                        actual_columns.append(
-                            header_value
-                        )
-
+                    
+                        actual_columns.append(header_value)
+                    
+                    # IMPORTANT
                     temp_df.columns = actual_columns
 
                     # FILL MERGED DATE CELLS
