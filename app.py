@@ -1,38 +1,27 @@
-# =========================================================
-# UNIVERSAL MEDIA REPORT CLEANER ENGINE (SEMI-AUTOMATION)
-# =========================================================
-#
-# FINAL OUTPUT FORMAT:
-# unique_key
-# date
-# impressions
-# clicks
-# views
-# spends
-# engagements
-# source_file
-# sheet_name
-#
-# =========================================================
-
+import streamlit as st
 import pandas as pd
 import numpy as np
 import os
 import re
-from openpyxl import load_workbook
+from io import BytesIO
 
 # =========================================================
-# CONFIG
+# PAGE CONFIG
 # =========================================================
 
-INPUT_FOLDER = "input_files"
-OUTPUT_FILE = "Unified_Output.xlsx"
+st.set_page_config(
+    page_title="Media Report Cleaner",
+    layout="wide"
+)
+
+st.title("📊 Universal Media Report Cleaner")
 
 # =========================================================
-# COLUMN MAPPING
+# COLUMN MAP
 # =========================================================
 
 COLUMN_MAP = {
+
     "date": [
         "date",
         "day",
@@ -57,15 +46,12 @@ COLUMN_MAP = {
 
     "views": [
         "views",
-        "video views",
-        "view"
+        "video views"
     ],
 
     "spends": [
         "spend",
-        "spends",
-        "cost",
-        "media cost"
+        "cost"
     ],
 
     "engagements": [
@@ -74,11 +60,13 @@ COLUMN_MAP = {
     ]
 }
 
+
 # =========================================================
-# HELPER FUNCTIONS
+# HELPERS
 # =========================================================
 
 def clean_string(x):
+
     if pd.isna(x):
         return ""
 
@@ -94,6 +82,7 @@ def extract_unique_key(filename):
     ]
 
     for pattern in patterns:
+
         match = re.search(pattern, filename, re.IGNORECASE)
 
         if match:
@@ -120,15 +109,15 @@ def is_total_row(row):
 
     row_text = " ".join([clean_string(x) for x in row])
 
-    total_keywords = [
+    keywords = [
         "total",
         "grand total",
         "summary"
     ]
 
-    for keyword in total_keywords:
+    for k in keywords:
 
-        if keyword in row_text:
+        if k in row_text:
             return True
 
     return False
@@ -157,6 +146,7 @@ def find_header_row(df):
                         score += 1
 
         if score > best_score:
+
             best_score = score
             best_row = i
 
@@ -176,7 +166,7 @@ def standardize_dataframe(df):
 
     df = df.rename(columns=mapped_columns)
 
-    final_columns = [
+    final_cols = [
         "date",
         "impressions",
         "clicks",
@@ -185,15 +175,15 @@ def standardize_dataframe(df):
         "engagements"
     ]
 
-    for col in final_columns:
+    for col in final_cols:
 
         if col not in df.columns:
             df[col] = ""
 
-    return df[final_columns]
+    return df[final_cols]
 
 
-def clean_numeric_columns(df):
+def clean_numeric(df):
 
     numeric_cols = [
         "impressions",
@@ -217,72 +207,55 @@ def clean_numeric_columns(df):
 
 
 # =========================================================
-# MAIN FILE PROCESSOR
+# FILE UPLOADER
 # =========================================================
 
-all_data = []
+uploaded_files = st.file_uploader(
+    "Upload Excel Files",
+    type=["xlsx", "xls"],
+    accept_multiple_files=True
+)
 
-files = [
-    f for f in os.listdir(INPUT_FOLDER)
-    if f.endswith((".xlsx", ".xls"))
-]
+# =========================================================
+# PROCESS
+# =========================================================
 
-for file in files:
+if uploaded_files:
 
-    print("=" * 60)
-    print(f"PROCESSING FILE: {file}")
+    all_data = []
 
-    file_path = os.path.join(INPUT_FOLDER, file)
+    progress = st.progress(0)
 
-    unique_key = extract_unique_key(file)
+    for idx, uploaded_file in enumerate(uploaded_files):
 
-    try:
+        st.write(f"Processing: {uploaded_file.name}")
 
-        excel_file = pd.ExcelFile(file_path)
+        unique_key = extract_unique_key(uploaded_file.name)
+
+        excel_file = pd.ExcelFile(uploaded_file)
 
         for sheet_name in excel_file.sheet_names:
-
-            print(f"Reading Sheet: {sheet_name}")
 
             try:
 
                 raw_df = pd.read_excel(
-                    file_path,
+                    uploaded_file,
                     sheet_name=sheet_name,
                     header=None
                 )
 
-                # =================================================
-                # FIND HEADER ROW
-                # =================================================
-
                 header_row = find_header_row(raw_df)
 
                 if header_row is None:
-                    print("No valid header found.")
                     continue
 
-                print(f"Header Found At Row: {header_row}")
-
-                # =================================================
-                # RELOAD WITH HEADER
-                # =================================================
-
                 df = pd.read_excel(
-                    file_path,
+                    uploaded_file,
                     sheet_name=sheet_name,
                     header=header_row
                 )
 
-                # =================================================
-                # CLEAN EMPTY ROWS
-                # =================================================
-
                 df = df.dropna(how="all")
-
-                # =================================================
-                # REMOVE TOTAL ROWS
-                # =================================================
 
                 mask = df.apply(
                     lambda row: is_total_row(row),
@@ -291,37 +264,17 @@ for file in files:
 
                 df = df[~mask]
 
-                # =================================================
-                # STANDARDIZE
-                # =================================================
-
                 df = standardize_dataframe(df)
 
-                # =================================================
-                # CLEAN NUMBERS
-                # =================================================
-
-                df = clean_numeric_columns(df)
-
-                # =================================================
-                # REMOVE EMPTY DATE ROWS
-                # =================================================
+                df = clean_numeric(df)
 
                 df = df[
                     df["date"].astype(str).str.strip() != ""
                 ]
 
-                # =================================================
-                # ADD METADATA
-                # =================================================
-
                 df["unique_key"] = unique_key
-                df["source_file"] = file
+                df["source_file"] = uploaded_file.name
                 df["sheet_name"] = sheet_name
-
-                # =================================================
-                # FINAL COLUMN ORDER
-                # =================================================
 
                 final_cols = [
                     "unique_key",
@@ -337,41 +290,45 @@ for file in files:
 
                 df = df[final_cols]
 
-                # =================================================
-                # APPEND
-                # =================================================
-
                 all_data.append(df)
 
-                print(f"Rows Extracted: {len(df)}")
-
             except Exception as e:
-                print(f"Sheet Error: {sheet_name}")
-                print(str(e))
 
-    except Exception as e:
-        print(f"File Error: {file}")
-        print(str(e))
+                st.warning(
+                    f"Sheet Error: {sheet_name} | {str(e)}"
+                )
 
+        progress.progress((idx + 1) / len(uploaded_files))
 
-# =========================================================
-# FINAL OUTPUT
-# =========================================================
+    # =====================================================
+    # FINAL OUTPUT
+    # =====================================================
 
-if len(all_data) > 0:
+    if len(all_data) > 0:
 
-    final_df = pd.concat(all_data, ignore_index=True)
+        final_df = pd.concat(all_data, ignore_index=True)
 
-    final_df.to_excel(
-        OUTPUT_FILE,
-        index=False
-    )
+        st.success("Processing Completed")
 
-    print("=" * 60)
-    print("UNIFIED OUTPUT CREATED SUCCESSFULLY")
-    print(f"Total Rows: {len(final_df)}")
-    print(f"Saved As: {OUTPUT_FILE}")
+        st.dataframe(final_df)
 
-else:
+        output = BytesIO()
 
-    print("NO DATA EXTRACTED")
+        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+
+            final_df.to_excel(
+                writer,
+                index=False,
+                sheet_name="Unified_Data"
+            )
+
+        st.download_button(
+            label="📥 Download Unified Output",
+            data=output.getvalue(),
+            file_name="Unified_Output.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+    else:
+
+        st.error("No Data Extracted")
