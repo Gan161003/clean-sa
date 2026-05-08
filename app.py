@@ -384,7 +384,9 @@ def process_vertical_sheet(
     # ELSE USE FILE NAME
     else:
 
-    df["unique_key"] = unique_key
+        df["unique_key"] = unique_key
+
+    
     df["source_file"] = file_name
     df["sheet_name"] = sheet_name
 
