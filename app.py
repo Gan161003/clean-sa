@@ -216,14 +216,22 @@ def standardize_dataframe(df):
 
     mapped_columns = {}
 
+    used_cols = set()
+    
     for col in df.columns:
-
+    
         mapped = map_column(col)
-
-        if mapped:
+    
+        if mapped and mapped not in used_cols:
+    
             mapped_columns[col] = mapped
+            used_cols.add(mapped)
 
     df = df.rename(columns=mapped_columns)
+    df = df.loc[
+        :,
+        ~pd.Index(df.columns).duplicated()
+    ]
 
     final_cols = [
         "date",
