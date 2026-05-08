@@ -46,7 +46,8 @@ COLUMN_MAP = {
     "views": [
         "view",
         "views",
-        "video views"
+        "video views",
+        "video complete"
     ],
 
     "spends": [
