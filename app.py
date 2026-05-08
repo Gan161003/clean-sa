@@ -139,6 +139,42 @@ def clean_numeric(series):
         .replace("", np.nan)
     )
 
+def get_dynamic_unique_key(df, fallback_key):
+
+    possible_cols = []
+
+    for col in df.columns:
+
+        col_clean = clean_string(col)
+
+        if (
+            "unique key" in col_clean
+            or
+            "unique_key" in col_clean
+            or
+            "placement id" in col_clean
+            or
+            "campaign id" in col_clean
+            or
+            "line item id" in col_clean
+        ):
+
+            possible_cols.append(col)
+
+    # USE INTERNAL COLUMN
+    if len(possible_cols) > 0:
+
+        selected_col = possible_cols[0]
+
+        return (
+            df[selected_col]
+            .astype(str)
+            .fillna(fallback_key)
+        )
+
+    # ELSE USE FILE NAME
+    return fallback_key
+
 
 # =========================================================
 # DETECT FILE TYPE
@@ -311,7 +347,11 @@ def process_vertical_sheet(
         df[col] = clean_numeric(df[col])
 
     df["creative"] = sheet_name
-    df["unique_key"] = unique_key
+    # df["unique_key"] = unique_key
+    df["unique_key"] = get_dynamic_unique_key(
+        df,
+        unique_key
+    )
     df["source_file"] = file_name
     df["sheet_name"] = sheet_name
 
@@ -695,6 +735,10 @@ def process_horizontal_sheet(
 
         temp_df["creative"] = table_title
         temp_df["unique_key"] = unique_key
+        temp_df["unique_key"] = get_dynamic_unique_key(
+            temp_df,
+            unique_key
+        )
         temp_df["source_file"] = file_name
         temp_df["sheet_name"] = sheet_name
 
@@ -714,7 +758,7 @@ def process_horizontal_sheet(
 
         temp_df = temp_df[final_cols]
 
-        temp_df = temp_df.drop_duplicates()
+        # temp_df = temp_df.drop_duplicates()
 
         all_tables.append(temp_df)
 
@@ -854,7 +898,7 @@ if uploaded_files:
             ignore_index=True
         )
 
-        final_df = final_df.drop_duplicates()
+        # final_df = final_df.drop_duplicates()
 
         st.success(
             "✅ Processing Completed"
