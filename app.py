@@ -466,6 +466,40 @@ def find_table_end(
     return len(df) - 1
 
 
+def detect_actual_header_row(
+    raw_df,
+    header_row,
+    start_col
+):
+
+    for r in range(
+        header_row,
+        min(header_row + 4, len(raw_df))
+    ):
+
+        row_text = " ".join([
+            clean_string(x)
+            for x in raw_df.iloc[
+                r,
+                start_col:start_col + 6
+            ]
+        ])
+
+        if (
+            "date" in row_text
+            and
+            (
+                "impression" in row_text
+                or
+                "click" in row_text
+            )
+        ):
+            return r
+
+    return header_row + 1
+
+
+
 def process_horizontal_sheet(
     raw_df,
     file_name,
@@ -500,9 +534,18 @@ def process_horizontal_sheet(
             header_row,
             start_col
         )
+        actual_header_row = detect_actual_header_row(
+            raw_df,
+            header_row,
+            start_col
+        )
 
+        # temp_df = raw_df.iloc[
+        #     header_row + 2:end_row + 1,
+        #     start_col:start_col + 6
+        # ].copy()
         temp_df = raw_df.iloc[
-            header_row + 2:end_row + 1,
+            actual_header_row + 1:end_row + 1,
             start_col:start_col + 6
         ].copy()
 
@@ -515,8 +558,12 @@ def process_horizontal_sheet(
 
         for c in range(total_cols):
 
+            # header_val = raw_df.iat[
+            #     header_row + 1,
+            #     start_col + c
+            # ]
             header_val = raw_df.iat[
-                header_row + 1,
+                actual_header_row,
                 start_col + c
             ]
 
