@@ -316,7 +316,7 @@ def process_vertical_sheet(
     df["sheet_name"] = sheet_name
 
     final_cols = [
-        "unique_key",
+        "file_unique_key",
         "creative",
         "date",
         "impressions",
@@ -628,7 +628,8 @@ def process_horizontal_sheet(
             columns=mapped_columns
         )
 
-        required_cols = [
+        # required_cols = [
+        metric_cols = [
             "date",
             "impressions",
             "clicks",
@@ -636,6 +637,17 @@ def process_horizontal_sheet(
             "spends",
             "engagements"
         ]
+        
+        # KEEP EXTRA DIMENSION COLUMNS
+        extra_cols = []
+        
+        for col in temp_df.columns:
+        
+            if col not in metric_cols:
+        
+                extra_cols.append(col)
+        
+        required_cols = metric_cols + extra_cols
 
         for col in required_cols:
 
@@ -700,7 +712,7 @@ def process_horizontal_sheet(
 
         final_cols = [
 
-            "unique_key",
+            "file_unique_key",
             "creative",
             "date",
             "impressions",
@@ -714,7 +726,7 @@ def process_horizontal_sheet(
 
         temp_df = temp_df[final_cols]
 
-        temp_df = temp_df.drop_duplicates()
+        # temp_df = temp_df.drop_duplicates()
 
         all_tables.append(temp_df)
 
@@ -854,7 +866,7 @@ if uploaded_files:
             ignore_index=True
         )
 
-        final_df = final_df.drop_duplicates()
+        # final_df = final_df.drop_duplicates()
 
         st.success(
             "✅ Processing Completed"
