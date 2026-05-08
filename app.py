@@ -352,15 +352,18 @@ def process_vertical_sheet(
     ]
 
     # DATE
+    # DATE
     df["date"] = pd.to_datetime(
         df["date"],
         errors="coerce",
         dayfirst=True
     )
-
-    df["date"] = df["date"].dt.strftime("%d-%m-%Y")
-
+    
+    # REMOVE INVALID DATES
     df = df[df["date"].notna()]
+    
+    # FORMAT DATE
+    df["date"] = df["date"].dt.strftime("%d-%m-%Y")
 
     # NUMERIC
     numeric_cols = [
@@ -755,16 +758,19 @@ def process_horizontal_sheet(
         # ]
 
         # DATE
+        # DATE
         temp_df["date"] = pd.to_datetime(
             temp_df["date"],
             errors="coerce",
             dayfirst=True
         )
         
+        # REMOVE INVALID DATES
         temp_df = temp_df[
             temp_df["date"].notna()
         ]
         
+        # FORMAT DATE
         temp_df["date"] = temp_df["date"].dt.strftime("%d-%m-%Y")
 
         if len(temp_df) == 0:
