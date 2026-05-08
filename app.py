@@ -574,6 +574,11 @@ def process_horizontal_sheet(
         actual_headers[0] = "date"
 
         temp_df.columns = actual_headers
+        # REMOVE DUPLICATE RAW COLUMNS
+        temp_df = temp_df.loc[
+            :,
+            ~pd.Index(temp_df.columns).duplicated()
+        ]
 
         # ONLY DATE FFILL
         temp_df.iloc[:, 0] = (
@@ -588,14 +593,27 @@ def process_horizontal_sheet(
             )
         ]
 
+        # mapped_columns = {}
+
+        # for col in temp_df.columns:
+
+        #     mapped = map_column(col)
+
+        #     if mapped:
+        #         mapped_columns[col] = mapped
         mapped_columns = {}
-
+        
+        used_cols = set()
+        
         for col in temp_df.columns:
-
+        
             mapped = map_column(col)
-
-            if mapped:
+        
+            if mapped and mapped not in used_cols:
+        
                 mapped_columns[col] = mapped
+                used_cols.add(mapped)
+                
 
         temp_df = temp_df.rename(
             columns=mapped_columns
