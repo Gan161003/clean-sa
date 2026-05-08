@@ -315,8 +315,36 @@ def process_vertical_sheet(
         axis=1
     )
 
+    # df = df[~mask]
+
+    # df = standardize_dataframe(df)
+
     df = df[~mask]
 
+    # =========================================
+    # SAVE ORIGINAL UNIQUE COLUMN
+    # =========================================
+    
+    original_unique = None
+    
+    for col in df.columns:
+    
+        col_clean = clean_string(col)
+    
+        if (
+            col_clean == "unique"
+            or
+            "unique key" in col_clean
+        ):
+    
+            original_unique = (
+                df[col]
+                .astype(str)
+            )
+    
+            break
+    
+    # STANDARDIZE
     df = standardize_dataframe(df)
 
     df = df[
@@ -348,10 +376,15 @@ def process_vertical_sheet(
 
     df["creative"] = sheet_name
     # df["unique_key"] = unique_key
-    df["unique_key"] = get_dynamic_unique_key(
-        df,
-        unique_key
-    )
+    # USE INTERNAL UNIQUE IF EXISTS
+    if original_unique is not None:
+    
+        df["unique_key"] = original_unique.values
+    
+    # ELSE USE FILE NAME
+    else:
+
+    df["unique_key"] = unique_key
     df["source_file"] = file_name
     df["sheet_name"] = sheet_name
 
@@ -641,6 +674,28 @@ def process_horizontal_sheet(
                 axis=1
             )
         ]
+        # =========================================
+        # SAVE ORIGINAL UNIQUE COLUMN
+        # =========================================
+        
+        original_unique = None
+        
+        for col in temp_df.columns:
+        
+            col_clean = clean_string(col)
+        
+            if (
+                col_clean == "unique"
+                or
+                "unique key" in col_clean
+            ):
+        
+                original_unique = (
+                    temp_df[col]
+                    .astype(str)
+                )
+        
+                break
 
         # mapped_columns = {}
 
@@ -734,11 +789,17 @@ def process_horizontal_sheet(
         )
 
         temp_df["creative"] = table_title
-        temp_df["unique_key"] = unique_key
-        temp_df["unique_key"] = get_dynamic_unique_key(
-            temp_df,
-            unique_key
-        )
+        # USE INTERNAL UNIQUE IF EXISTS
+        if original_unique is not None:
+        
+            temp_df["unique_key"] = (
+                original_unique.values
+            )
+        
+        # ELSE USE FILE NAME
+        else:
+        
+            temp_df["unique_key"] = unique_key
         temp_df["source_file"] = file_name
         temp_df["sheet_name"] = sheet_name
 
